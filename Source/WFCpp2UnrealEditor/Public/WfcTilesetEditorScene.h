@@ -2,7 +2,7 @@
 
 #include <array>
 
-#include "Tiled3D/Transform3D.h"
+#include "WFC++/include/Tiled3D/Transform3D.h"
 #include "WfcTileset.h"
 
 #include "AdvancedPreviewScene.h"

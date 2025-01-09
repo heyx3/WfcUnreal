@@ -10,22 +10,6 @@ public class WFCpp2 : ModuleRules
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 		
-		//Integrate WFC++.
-		//TODO: Bring WFC++ in as a git submodule somehow.
-		PublicIncludePaths.AddRange(new string[] {
-			"E:/Git Repos/wfcpp/WFC++"
-		} );
-		var wfcDir = DirectoryReference.Combine(
-			DirectoryReference.FromString(ModuleDirectory).ParentDirectory.ParentDirectory.ParentDirectory.ParentDirectory.ParentDirectory,
-			"wfcpp", "WFC++"
-		);
-		foreach (string subFolder in new[] { "Tiled3D", "HelperSrc" })
-		{
-			var nestedWfcDir = DirectoryReference.Combine(wfcDir, subFolder);
-			if (!ConditionalAddModuleDirectory(nestedWfcDir))
-				throw new Exception("WFC++ directory not found! Expected at " + nestedWfcDir);
-		}
-		
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
 			"Core"
@@ -38,7 +22,24 @@ public class WFCpp2 : ModuleRules
 			"SlateCore"
 		} );
 		
-		//Enable debugging:
+		//Integrate WFC++.
+		//  Headers:
+		var wfcDir = DirectoryReference.Combine(
+			DirectoryReference.FromString(PluginDirectory),
+			"Core"
+		);
+		PublicIncludePaths.Add(wfcDir.FullName);
+		//  Source:
+		var wfcSourceDirs = new string[] { "Helpers", "Tiled3D" };
+		foreach (string wfcSourceDir in wfcSourceDirs)
+		{
+			var directory = DirectoryReference.Combine(
+				wfcDir, "WFC++", "src", wfcSourceDir
+			);
+			if (!ConditionalAddModuleDirectory(directory))
+				throw new Exception("WFC++ directory not found! Expected at " + directory);
+		}
+		//  Preprocessor:
 		if (new HashSet<UnrealTargetConfiguration>() {
 			    UnrealTargetConfiguration.Debug,
 			    UnrealTargetConfiguration.DebugGame

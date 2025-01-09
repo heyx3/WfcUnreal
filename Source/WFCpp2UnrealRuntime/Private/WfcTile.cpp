@@ -1,7 +1,5 @@
 ﻿#include "WfcTile.h"
 
-#include "Vector2i.h"
-
 
 WFC::Tiled3D::FacePoints FWfcTileFace::GetPrototypeCorner(WFC::Tiled3D::FacePoints thisCorner) const
 {
