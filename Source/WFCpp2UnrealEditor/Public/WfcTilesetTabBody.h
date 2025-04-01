@@ -1,6 +1,6 @@
 ﻿#pragma once
 
-#include "WfcTilesetEditorViewportClient.h"
+#include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
 #include "Widgets/SCompoundWidget.h"
 
 //Based on this wonderful tutorial:

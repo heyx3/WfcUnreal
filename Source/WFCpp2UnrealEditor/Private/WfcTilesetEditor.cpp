@@ -17,10 +17,10 @@
 #include "EditorStyleSet.h"
 
 #include "WFCpp2UnrealEditor.h"
-#include "WfcTilesetEditorScene.h"
+#include "WfcEditorScenes/WfcTilesetEditorScene.h"
 #include "WfcTilesetEditorSceneViewTab.h"
 #include "WfcTilesetEditorViewport.h"
-#include "WfcTilesetEditorViewportClient.h"
+#include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
 #include "WfcTilesetTabBody.h"
 
 

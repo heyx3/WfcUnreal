@@ -11,7 +11,7 @@
 #include "AssetTypeActions_WfcTileset.h"
 #include "WfcTileData.h"
 #include "WfcTilesetEditor.h"
-#include "WfcTileVisualizer.h"
+#include "WfcEditorScenes/WfcTileVisualizer.h"
 
 
 #define LOCTEXT_NAMESPACE "FWFCpp2UnrealEditorModule"
@@ -39,10 +39,6 @@ public:
 	    // propEditorModule.RegisterCustomClassLayout(UWfcTileset::StaticClass()->GetFName(),
 	    //                                            FOnGetDetailCustomizationInstance::CreateLambda([]() { return MakeShared(FTilesetDetailsCustomization()); }));
 	    //TODO: Re-enable this
-
-		//Register our built-in tile data visualizers.
-		RegisterTileDataVisualizer(UWfcTileGameData_StaticMesh::StaticClass(), MakeShared<FWfcTileVisualizer_StaticMesh>());
-		RegisterTileDataVisualizer(UWfcTileGameData_Actor::StaticClass(), MakeShared<FWfcTileVisualizer_Actor>());
 	}
 	virtual void ShutdownModule() override
 	{
@@ -62,9 +58,6 @@ public:
 
 	    auto& propEditorModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
 	    propEditorModule.UnregisterCustomClassLayout(UWfcTileset::StaticClass()->GetFName());
-
-		//Unregister all tile data visualizers.
-		VisualizerLookup.Empty();
 	}
 
 	virtual TSharedPtr<FExtensibilityManager> GetMenuExtensibilityManager() override { return menuExtensibilityManager; }
@@ -79,38 +72,6 @@ public:
 	    
 		editor->InitWfcTilesetEditorEditor(mode, initToolkitHost, tileset);
 		return editorRef;
-	}
-	
-	TArray<TTuple<TWeakObjectPtr<UClass>, TSharedPtr<FWfcTileVisualizerBase>>> VisualizerLookup;
-	virtual void RegisterTileDataVisualizer(TSubclassOf<UWfcTileGameData> tileDataType,
-				  							TSharedRef<FWfcTileVisualizerBase> visualizer) override
-	{
-		if (!Algo::AnyOf(VisualizerLookup, [&](const auto& tuple) { return tuple.Key == tileDataType.Get(); }))
-			VisualizerLookup.Emplace(tileDataType.Get(), visualizer);
-		else
-			checkf(false, TEXT("Registered more than one WfcTileVisualizer for %s"), *tileDataType->GetName());
-	}
-	virtual TSharedPtr<FWfcTileVisualizerBase> GetTileDataVisualizer(TSubclassOf<UWfcTileGameData> tileDataType) const override
-	{
-		if (!IsValid(tileDataType))
-			return nullptr;
-    
-		using Element_t = std::remove_reference_t<decltype(VisualizerLookup[0])>;
-		const Element_t* bestOption = nullptr;
-		for (const auto& visualizerLookupData : VisualizerLookup)
-		{
-			const auto lookupClass = visualizerLookupData.Key;
-        
-			//Is the registered type still valid?
-			if (lookupClass.IsValid())
-				//Is the registered type compatible with this type?
-					if ((tileDataType->IsChildOf(lookupClass.Get()) || lookupClass->IsChildOf(tileDataType)))
-						//Is this the most *specific* registered type found so far?
-							if (bestOption == nullptr || lookupClass->IsChildOf(bestOption->Key.Get()))
-								bestOption = &visualizerLookupData;
-		}
-
-		return (bestOption == nullptr) ? nullptr : bestOption->Value;
 	}
 
 

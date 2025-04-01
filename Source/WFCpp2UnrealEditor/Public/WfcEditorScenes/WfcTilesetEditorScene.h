@@ -27,39 +27,11 @@ public:
     //Call continuously so that this scene can respond to changes in tile data, camera, etc.
     void Refresh(const UWfcTileset* tileset, TOptional<WfcTileID> tileID, const FVector& camPos,
                  class FWfcTilesetEditorViewportClient* owner);
-
-    //TODO: Configurable origin point
     
 private:
     
-    struct FacePointViz
-    {
-        FVector Pos;
-        WFC::Tiled3D::FacePoints CornerType;
-        
-        USphereComponent* Shape;
-        UTextRenderComponent* Label;
-    };
-    void InitializeFacePointViz(WFC::Tiled3D::Directions3D face, FacePointViz& inOutData);
-    
-    struct FaceViz
-    {
-        FVector Pos;
-        WFC::Tiled3D::Directions3D Dir;
-        
-        UStaticMeshComponent* Component;
-        TStaticArray<FacePointViz, WFC::Tiled3D::N_FACE_POINTS> Points;
-    };
-    void InitializeFaceViz(FaceViz& inOutData);
-
-    
-    TStaticArray<FaceViz, WFC::Tiled3D::N_DIRECTIONS_3D> faces;
-    TWeakObjectPtr<UTextRenderComponent> faceLabel;
-
     int32 chosenTileIdx;
     TWeakObjectPtr<class UWfcTileGameData> chosenTileData;
-    TSharedPtr<class FWfcTileVisualizerBase> tileVisualizer;
-    
-    TArray<TWeakObjectPtr<AActor>> tileVizActors;
-    TArray<TWeakObjectPtr<UActorComponent>> tileVizLoneComponents;
+	
+	TUniquePtr<class WfcTileVisualizer> currentTileVisualizer;
 };

@@ -1,7 +1,7 @@
 ﻿#include "WfcTilesetTabBody.h"
 
-#include "WfcTilesetEditorScene.h"
-#include "WfcTilesetEditorViewportClient.h"
+#include "WfcEditorScenes/WfcTilesetEditorScene.h"
+#include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
 #include "WfcTilesetEditorViewport.h"
 
 void SWfcTilesetTabBody::Construct(const FArguments& inArgs)

@@ -86,42 +86,69 @@ enum class WFC_Rotations3D : uint8
 	CornerBBA_240 = WFC::Tiled3D::Rotations3D::CornerBBA_240
 };
 
-
-//Provides a unique ID for each corner of a cube face.
-//These ID's describe both the symmetry of the face,
-//    and its ability to match up with another face.
-//The faces are ordered based on the two world-space axes along that face.
-// The first letter describes the first axis (X or Y),
-//     and the second describes the second axis (Y or Z).
-// An 'A' means the min side of that axis, while 'B' means the max side.
+//A unique identifier for a specific cube face, using identifiers organized in world space.
+//
+//For consistency the axes are always ordered X->Y->Z (e.g. on the Z face, axis 1 is X and axis 2 is Y).
+//
+//This face's symmetries are implicit in the use of duplicate identifiers;
+//    for example if all corners and faces have the same ID
+//    then all permutations of this face are equivalent.
 USTRUCT(BlueprintType)
 struct FWFC_Face
 {
 	GENERATED_BODY()
 
 public:
-	//The corner on the 'min' side of both face axes.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int AA;
-	//The corner on the 'min' side of the first axis (X or Y),
-	//    and the 'max' side of the second axis (Y or Z).
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int AB;
-	
-	//The corner on the 'max' side of the first axis (X or Y),
-	//    and the 'min' side of the second axis (Y or Z).
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int BA;
-	//The corner on the 'max' side of both face axes.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int BB;
 
+	//The corner on the 'min' side of both face axes.
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
+	int CornerAA = 0;
+	//The corner on the 'min' side of the first face axis (X or Y),
+	//    and the 'max' side of the second face axis (Y or Z).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin=0))
+	int CornerAB = 0;
+	//The corner on the 'max' side of the first face axis (X or Y),
+	//    and the 'min' side of the second face axis (Y or Z).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin=0))
+	int CornerBA = 0;
+	//The corner on the 'max' side of both face axes.
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
+	int CornerBB = 0;
+
+	//The 'min' edge parallel to the first face axis (X or Y).
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
+	int EdgeAA = 0;
+	//The 'max' edge parallel to the first face axis (X or Y).
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
+	int EdgeAB = 0;
+	//The 'min' edge parallel to the second face axis (Y or Z).
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
+	int EdgeBA = 0;
+	//The 'max' edge parallel to the second face axis (Y or Z).
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
+	int EdgeBB = 0;
+
+	WFC::Tiled3D::FaceIdentifiers Unwrap() const
+	{
+		WFC::Tiled3D::FaceIdentifiers fi;
+		fi.Corners[WFC::Tiled3D::AA] = CornerAA;
+		fi.Corners[WFC::Tiled3D::AB] = CornerAB;
+		fi.Corners[WFC::Tiled3D::BA] = CornerBA;
+		fi.Corners[WFC::Tiled3D::BB] = CornerBB;
+		fi.Edges[WFC::Tiled3D::AA] = EdgeAA;
+		fi.Edges[WFC::Tiled3D::AB] = EdgeAB;
+		fi.Edges[WFC::Tiled3D::BA] = EdgeBA;
+		fi.Edges[WFC::Tiled3D::BB] = EdgeBB;
+		return fi;
+	}
+	auto GetFields() const { return MakeTuple(CornerAA, CornerAB, CornerBA, CornerBB,
+											  EdgeAA, EdgeAB, EdgeBA, EdgeBB); }
 	bool operator==(const FWFC_Face& f) const
 	{
-		return AA == f.AA && AB == f.AB && BA == f.BA && BB == f.BB;
+		return GetFields() == f.GetFields();
 	}
 };
-inline uint32 GetTypeHash(const FWFC_Face& face) { return GetTypeHash(MakeTuple(face.AA, face.AB, face.BA, face.BB)); }
+inline uint32 GetTypeHash(const FWFC_Face& face) { return GetTypeHash(face.GetFields()); }
 template<>
 struct TStructOpsTypeTraits<FWFC_Face> : public TStructOpsTypeTraitsBase2<FWFC_Face>
 {

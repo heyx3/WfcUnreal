@@ -167,7 +167,7 @@ void UWfcGenerator::Start(const UWfcTileset* tiles,
     //TODO: Allocate reusable buffers for the input data setup, below.
     
     //Assign unique point ID's based on the face prototypes.
-    //Each face prototype can have up to 4 values.
+	//Edges and corners do not interchange, so they can reuse the same ID values.
     WFC::Tiled3D::PointID nextPointID = 1;
     for (const auto& facePrototype : tiles->FacePrototypes)
     {
@@ -189,13 +189,13 @@ void UWfcGenerator::Start(const UWfcTileset* tiles,
     	auto& wfcTile = wfcTileInputs.back();
         wfcTile.Weight = static_cast<uint32_t>(tile.Value.WeightU32);
 
-        //Convert the serialized UE4 permutation set into a WFC library permutation set.
+        //Convert the Unreal-serialized permutation set into a WFC library permutation set.
         buffer_supportedTransforms.Empty();
         tile.Value.GetSupportedTransforms(buffer_supportedTransforms);
         for (auto transform : buffer_supportedTransforms)
             wfcTile.Permutations.Add(transform.Unwrap());
 
-        //Convert the serialized UE4 face data into WFC library face data.
+        //Convert the Unreal-serialized face data into WFC library face data.
         for (int faceI = 0; faceI < WFC::Tiled3D::N_DIRECTIONS_3D; ++faceI)
         {
             auto dir = static_cast<WFC::Tiled3D::Directions3D>(faceI);
@@ -207,14 +207,18 @@ void UWfcGenerator::Start(const UWfcTileset* tiles,
             auto firstFaceID = wfcFacePrototypeFirstIDs[assetFace.PrototypeID];
             for (int pointI = 0; pointI < WFC::Tiled3D::N_FACE_POINTS; ++pointI)
             {
-                auto localCorner = static_cast<WFC::Tiled3D::FacePoints>(pointI);
-                auto prototypeCorner = assetFace.GetPrototypeCorner(localCorner);
-                auto cornerID = prototype.GetPointSymmetry(prototypeCorner);
+                auto localPoint = static_cast<WFC::Tiled3D::FacePoints>(pointI);
+                auto prototypeCorner = assetFace.GetPrototypeCorner(localPoint),
+            		 prototypeEdge = assetFace.GetPrototypeEdge(localPoint);
+                auto cornerID = prototype.GetCornerSymmetry(prototypeCorner),
+            		 edgeID = prototype.GetEdgeSymmetry(prototypeEdge);
 
                 //Convert the 0-3 symmetry value stored in the asset,
                 //    into a unique index across all tile faces.
-                auto cornerUniqueID = firstFaceID + static_cast<WFC::Tiled3D::PointID>(cornerID);
-                wfcTile.Data.Faces[faceI].Points[pointI] = cornerUniqueID;
+                auto cornerUniqueID = firstFaceID + static_cast<WFC::Tiled3D::PointID>(cornerID),
+            		 edgeUniqueID = firstFaceID + static_cast<WFC::Tiled3D::PointID>(edgeID);
+                wfcTile.Data.Faces[faceI].Points.Corners[pointI] = cornerUniqueID;
+            	wfcTile.Data.Faces[faceI].Points.Edges[pointI] = edgeUniqueID;
             }
         }
     }

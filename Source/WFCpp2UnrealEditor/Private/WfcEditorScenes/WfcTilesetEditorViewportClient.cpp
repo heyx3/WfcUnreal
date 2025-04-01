@@ -1,4 +1,4 @@
-﻿#include "WfcTilesetEditorViewportClient.h"
+﻿#include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
 
 #include "WFCpp2UnrealEditor.h"
 
@@ -37,8 +37,7 @@ void FWfcTilesetEditorViewportClient::Tick(float deltaSeconds)
         FocusViewportOnBox(FBox(FVector::OneVector * -500, FVector::OneVector * 500),
                            true);
     }
-    
-
+	
     OnTick.Broadcast(deltaSeconds);
 }
 void FWfcTilesetEditorViewportClient::Draw(FViewport* viewport, FCanvas* canvas)
