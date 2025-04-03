@@ -13,7 +13,7 @@ struct WFCPP2UNREALEDITOR_API FEditorSceneComponent
 {
 public:
 	
-	FEditorSceneComponent(FPreviewScene* owner, FTransform transform,
+	FEditorSceneComponent(FPreviewScene* owner, const FTransform& transform,
 						  TSubclassOf<UActorComponent> type);
 	virtual ~FEditorSceneComponent();
 

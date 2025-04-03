@@ -8,25 +8,13 @@
 #include "Kismet/KismetMathLibrary.h"
 
 
-FEditorSceneComponent::FEditorSceneComponent(FPreviewScene* _owner, FTransform transform, TSubclassOf<UActorComponent> type)
+FEditorSceneComponent::FEditorSceneComponent(FPreviewScene* _owner, const FTransform& transform, TSubclassOf<UActorComponent> type)
 	: owner(_owner)
 {
 	check(owner);
 
-	//For some reason, we have to remove the scale from the transform when spawning,
-	//    *then* set the scale afterwards.
-	auto scale = transform.GetScale3D();
-	transform.SetScale3D(FVector::OneVector);
-	
 	componentUntyped = NewObject<UActorComponent>(GetTransientPackage(), type);
 	owner->AddComponent(componentUntyped.Get(), transform);
-
-	if (auto* sceneComponent = Cast<USceneComponent>(componentUntyped))
-		sceneComponent->SetRelativeScale3D(scale);
-
-	//Not sure if this is really needed...
-	componentUntyped->MarkRenderTransformDirty();
-	componentUntyped->MarkRenderStateDirty();
 }
 FEditorSceneComponent::~FEditorSceneComponent()
 {
@@ -144,6 +132,6 @@ FTransform FEditorPlaneComponent::GetTransform(const FVector& origin, const FVec
 	auto sizeRelative = planeSize / 128.0;
 	return FTransform{
 		rot, origin,
-		rot.RotateVector({ 1, sizeRelative.X, sizeRelative.Y }).GetAbs()
+		FVector{ -1, sizeRelative.X, sizeRelative.Y }.GetAbs()
 	};
 }
