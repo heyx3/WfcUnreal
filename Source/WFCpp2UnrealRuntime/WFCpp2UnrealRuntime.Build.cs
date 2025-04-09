@@ -10,10 +10,13 @@ public class WFCpp2UnrealRuntime : ModuleRules
             new string[]
             {
                 "Core",
-                "WFCpp2",
-                "AssetTools"
+                "WFCpp2"
             }
         );
+        if (Target.bCompileAgainstEditor)
+            PrivateDependencyModuleNames.AddRange(new[] {
+                "AssetTools"
+            });
 
         PrivateDependencyModuleNames.AddRange(
             new string[]
