@@ -259,7 +259,6 @@ void FWfcTilesetEditorScene::Refresh(const UWfcTileset* tileset, TOptional<WfcTi
         for (auto& point : face.Points)
         {
             //Update position.
-            FVector pointPos;
             point.Pos[mainAxis] = face.Pos[mainAxis] * 1.25f;
             point.Pos[planeAxis1] = (tileLength / 2.0f) *
                                     (WFC::Tiled3D::IsFirstMin(point.CornerType) ? -1 : 1);

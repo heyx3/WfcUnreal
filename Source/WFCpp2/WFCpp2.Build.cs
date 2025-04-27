@@ -49,5 +49,7 @@ public class WFCpp2 : ModuleRules
 			PublicDefinitions.Add("WFCPP_DEBUG=1");
 		}
 		PublicDefinitions.Add("WFC_API=WFCPP2_API");
+		//Warnings:
+		bWarningsAsErrors = false;
 	}
 }
