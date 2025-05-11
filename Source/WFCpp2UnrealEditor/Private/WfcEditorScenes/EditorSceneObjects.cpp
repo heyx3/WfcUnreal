@@ -147,7 +147,12 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 				faceTr.GetScale3D()
 			};
 			if (cornerLabels[facePointTile].IsSet())
-				cornerLabels[facePointTile]->GetComponent()->SetWorldTransform(cornerTrs[facePointTile]);
+			{
+				auto tr = cornerTrs[facePointTile];
+				tr.SetLocation(tr.GetLocation() + tr.GetRotation().GetForwardVector() *
+							   (cubeExtents * 0.1));
+				cornerLabels[facePointTile]->GetComponent()->SetWorldTransform(tr);
+			}
 			if (cornerArrows[facePointTile].IsSet())
 			{
 				auto* arrow = cornerArrows[facePointTile]->GetComponent();
@@ -182,7 +187,12 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 				faceTr.GetScale3D()
 			};
 			if (edgeLabels[facePoint].IsSet())
-				edgeLabels[facePoint]->GetComponent()->SetWorldTransform(edgeTrs[facePoint]);
+			{
+				auto tr = cornerTrs[facePoint];
+				tr.SetLocation(tr.GetLocation() + tr.GetRotation().GetForwardVector() *
+							   (cubeExtents * 0.1));
+				edgeLabels[facePoint]->GetComponent()->SetWorldTransform(tr);
+			}
 			if (edgeArrows[facePoint].IsSet())
 			{
 				auto* arrow = edgeArrows[facePoint]->GetComponent();
