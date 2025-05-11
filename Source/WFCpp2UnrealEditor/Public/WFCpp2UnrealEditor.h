@@ -9,7 +9,7 @@ class UWfcTileset;
 class IWfcTilesetEditor;
 
 extern const FName WfcTilesetEditorAppIdentifier;
-DECLARE_LOG_CATEGORY_EXTERN(LogWFCppEditor, Log, All);
+WFCPP2UNREALEDITOR_API DECLARE_LOG_CATEGORY_EXTERN(LogWFCppEditor, Log, All);
 
 
 class IWFCpp2UnrealEditorModule : public IModuleInterface,

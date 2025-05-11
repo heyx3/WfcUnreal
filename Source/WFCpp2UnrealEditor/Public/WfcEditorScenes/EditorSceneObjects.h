@@ -5,6 +5,7 @@
 #include "WfcDataReflection.h"
 #include "EditorSceneComponents.h"
 #include "WfcFacePrototype.h"
+#include "WfcTileVisualizer.h"
 
 
 //A scoped owner of a group of components in a preview/editor scene,
@@ -14,7 +15,9 @@ struct WFCPP2UNREALEDITOR_API FEditorSceneObject
 public:
 
 	FPreviewScene* const Owner;
+	
 	FEditorSceneObject(FPreviewScene* owner) : Owner(owner) { }
+	FEditorSceneObject(FEditorSceneObject&&) = default;
 
 	virtual ~FEditorSceneObject() { }
 
@@ -74,10 +77,11 @@ struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcTile : public FEditorSceneOb
 {
 public:
 
-	FEditorSceneObject_WfcTile(FPreviewScene* owner,
-							   const FTransform& tr, double extentsPreScaling,
+	FEditorSceneObject_WfcTile(FWfcTilesetEditorScene& owner, class FWfcTilesetEditorViewportClient& viewportClient,
+							   const FTransform& tr,
 							   const FLinearColor& boundsColor,
-							   const class UWfcTileset* tileset, int32 tileID);
+							   const class UWfcTileset* tileset, int32 tileID,
+							   bool includeVisualizer = true);
 
 	FTransform GetCurrentTransform() const { return currentTr; }
 	void SetTransform(const FTransform& newTr);
@@ -93,4 +97,31 @@ private:
 	
  	TArray<FEditorSceneObject_WfcFace, TInlineAllocator<WFC::Tiled3D::N_DIRECTIONS_3D>> faces;
 	FEditorWireBoxComponent tileBounds;
+	TUniquePtr<WfcTileVisualizer> tileDataVisualizer;
+};
+
+//An editor object that visualizes all supported permutations of a WFC tile.
+struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcTileWithPermutations : public FEditorSceneObject
+{
+public:
+
+	FEditorSceneObject_WfcTileWithPermutations(FWfcTilesetEditorScene& owner, FWfcTilesetEditorViewportClient& viewportClient,
+										       const FTransform& tr, double spacingBetweenTiles,
+											   const FLinearColor& boundsColor, const FLinearColor& labelColor,
+											   const class UWfcTileset* tileset, int32 tileID,
+											   bool visualizeTileData = true);
+
+private:
+
+	struct Permutation
+	{
+		FEditorSceneObject_WfcTile Tile;
+		FEditorTextComponent Label;
+		FWFC_Transform3D WfcTransform;
+
+		Permutation(FEditorSceneObject_WfcTile&& tile, FEditorTextComponent&& label, const FWFC_Transform3D& tr)
+			: Tile(MoveTemp(tile)), Label(MoveTemp(label)), WfcTransform(tr) { }
+	};
+	TArray<Permutation, TInlineAllocator<WFC::Tiled3D::N_TRANSFORMS>> permutations;
+	TOptional<FEditorTextComponent> overallLabel;
 };

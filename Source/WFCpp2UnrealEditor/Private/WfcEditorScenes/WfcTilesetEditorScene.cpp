@@ -1,17 +1,8 @@
 ﻿#include "WfcEditorScenes/WfcTilesetEditorScene.h"
 
 #include "GameFramework/WorldSettings.h"
-#include "Components/BoxComponent.h"
-#include "Components/SphereComponent.h"
-#include "Components/ShapeComponent.h"
-#include "Components/DirectionalLightComponent.h"
-#include "Components/TextRenderComponent.h"
-#include "Kismet/KismetMathLibrary.h"
 
 #include "WFCpp2UnrealEditor.h"
-#include "WfcTileData.h"
-#include "WfcTilesetEditorUtils.h"
-#include "WfcEditorScenes/WfcTileVisualizer.h"
 
 
 FWfcTilesetEditorScene::FWfcTilesetEditorScene(ConstructionValues cvs)
@@ -26,7 +17,7 @@ FWfcTilesetEditorScene::FWfcTilesetEditorScene(ConstructionValues cvs)
 	SetEnvironmentVisibility(true);
 }
 
-void FWfcTilesetEditorScene::Refresh(const UWfcTileset* tileset, TOptional<WfcTileID> tile, const FVector& camPos,
+void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> tile, const FVector& camPos,
                                      FWfcTilesetEditorViewportClient* owner)
 {
     check(owner);
@@ -40,33 +31,52 @@ void FWfcTilesetEditorScene::Refresh(const UWfcTileset* tileset, TOptional<WfcTi
 			newTileData.Emplace(*found);
 	}
 
-	//If new and old tiles exist, check whether the referenced tile has changed.
-	if (newTileData && currentTileVisualizer.IsValid() &&
-		(currentTileVisualizer->GetInputs().Tileset != tileset ||
-		 currentTileVisualizer->GetInputs().TileIdx != *tile ||
-		 currentTileVisualizer->GetInputs().Tile != tileset->Tiles[*tile] ||
-		 !currentTileVisualizer->GetInputs().Tileset->FacePrototypes.OrderIndependentCompareEqual(tileset->FacePrototypes)))
+	auto refreshViz = [&]()
 	{
-		currentTileVisualizer = WfcTileVisualizer::MakeVisualizer({
-			*this, *owner,
-			tileset, *tile, newTileData,
-			FTransform{ }
-		});
+		check(newTileData.IsSet());
+		currentTileset = { tileset };
+		currentTileID = *tile;
+		currentTile = currentTileset->Tiles[*currentTileID];
+		
+		if (VisualizeWithPermutations)	
+		{
+			viewMode.Emplace<FEditorSceneObject_WfcTileWithPermutations>(
+				*this, *owner,
+				FTransform{ }, PermutationSpacing,
+				FLinearColor{ 0, 0, 0, 1 }, FLinearColor{ 0, 0, 0, 1 },
+				tileset, *tile
+			);
+		}
+		else
+		{
+			viewMode.Emplace<FEditorSceneObject_WfcTile>(
+				*this, *owner,
+				FTransform{ }, FLinearColor{ 0, 0, 0, 1 },
+				tileset, *tile
+			);
+		}
+	};
+	
+	//If new and old tiles exist, check whether the referenced tile has changed.
+	if (newTileData && currentTileset.IsValid() &&
+		(VisualizeWithPermutations != viewMode.IsType<FEditorSceneObject_WfcTileWithPermutations>() ||
+		 currentTileset.Get() != tileset ||
+		 !currentTile.IsSet() || *newTileData != *currentTile ||
+		 !currentTileID.IsSet() || *tile != *currentTileID ||
+		 currentTileset->FacePrototypes.OrderIndependentCompareEqual(tileset->FacePrototypes)))
+	{
+		refreshViz();
 	}
 	//If new tile exists and the old doesn't, create a new visualizer.
-	else if (newTileData && !currentTileVisualizer.IsValid())
+	else if (newTileData && viewMode.IsType<std::nullptr_t>())
 	{
-		currentTileVisualizer = WfcTileVisualizer::MakeVisualizer({
-			*this, *owner,
-			tileset, *tile, newTileData,
-			FTransform{ }
-		});
+		refreshViz();
 	}
 	//If old tile exists and new one doesn't, clear it out.
-	else if (!newTileData && currentTileVisualizer.IsValid())
+	else if (!newTileData && !viewMode.IsType<std::nullptr_t>())
 	{
-		currentTileVisualizer.Reset();
+		viewMode.Set<std::nullptr_t>(nullptr);
 	}
 
-	//TODO: Scale each face's alpha based on camera focus. This requires sending camera data to the visualizer.
+	//TODO: Scale each face's alpha based on camera focus. This requires sending camera data to the editor-object.
 }

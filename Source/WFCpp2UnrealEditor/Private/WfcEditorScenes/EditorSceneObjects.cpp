@@ -4,10 +4,13 @@
 #include "Components/BoxComponent.h"
 #include "Components/SphereComponent.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Algo/Count.h"
 
-#include <WFC++/include/Helpers/WFCMath.h>
-#include "WfcBpUtils.h"
 #include "WfcTileset.h"
+#include "WfcBpUtils.h"
+#include "WfcEditorScenes/WfcTileVisualizer.h"
+#include "WfcEditorScenes/WfcTilesetEditorScene.h"
+#include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
 
 
 namespace
@@ -148,9 +151,13 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 			};
 			if (cornerLabels[facePointTile].IsSet())
 			{
+				//Give each face a different vertical offset so the labels don't intersect each other.
+				float verticalOffset = std::to_array({-40, 0, 40})[faceIdx];
+				
 				auto tr = cornerTrs[facePointTile];
-				tr.SetLocation(tr.GetLocation() + tr.GetRotation().GetForwardVector() *
-							   (cubeExtents * 0.1));
+				tr.SetLocation(tr.GetLocation() +
+								 (tr.GetRotation().GetForwardVector() * (cubeExtents * 0.1)) +
+								 (tr.GetRotation().GetUpVector() * (verticalOffset)));
 				cornerLabels[facePointTile]->GetComponent()->SetWorldTransform(tr);
 			}
 			if (cornerArrows[facePointTile].IsSet())
@@ -253,14 +260,15 @@ void FEditorSceneObject_WfcFace::RebuildColors()
 	}
 }
 
-FEditorSceneObject_WfcTile::FEditorSceneObject_WfcTile(FPreviewScene* owner,
-													   const FTransform& tr, double extentsPreScaling,
+FEditorSceneObject_WfcTile::FEditorSceneObject_WfcTile(FWfcTilesetEditorScene& owner, FWfcTilesetEditorViewportClient& viewportClient,
+													   const FTransform& tr,
 													   const FLinearColor& boundsColor,
-													   const UWfcTileset* tileset, int32 tileID)
-    : FEditorSceneObject(owner),
+													   const UWfcTileset* tileset, int32 tileID,
+													   bool includeVisualizer)
+    : FEditorSceneObject(&owner),
       tileBounds(Owner,
-      			 FBox{ tr.GetLocation() - (extentsPreScaling * tr.GetScale3D()),
-      			 	   tr.GetLocation() + (extentsPreScaling * tr.GetScale3D()) },
+      			 FBox{ tr.GetLocation() - ((tileset->TileLength / 2.0) * tr.GetScale3D()),
+      			 	   tr.GetLocation() + ((tileset->TileLength / 2.0) * tr.GetScale3D()) },
       			 tr.GetRotation().Rotator(),
       			 boundsColor.ToFColorSRGB())
 {
@@ -279,10 +287,16 @@ FEditorSceneObject_WfcTile::FEditorSceneObject_WfcTile(FPreviewScene* owner,
 			continue;
 		}
 		
-		faces.Emplace(Owner, tr, extentsPreScaling,
+		faces.Emplace(Owner, tr, tileset->TileLength / 2.0,
 			          static_cast<WFC_Directions3D>(dir),
 			          *facePrototype, faceData.PrototypeOrientation);
 	}
+
+	if (includeVisualizer)
+		tileDataVisualizer = WfcTileVisualizer::MakeVisualizer({
+			owner, viewportClient,
+			{ tileset }, tileID, tileset->Tiles[tileID], tr
+		});
 }
 void FEditorSceneObject_WfcTile::SetTransform(const FTransform& newTr)
 {
@@ -291,4 +305,115 @@ void FEditorSceneObject_WfcTile::SetTransform(const FTransform& newTr)
 	for (auto& face : faces)
 		face.SetTileTransform(newTr);
 	tileBounds.GetComponent()->SetWorldTransform(currentTr);
+}
+
+FEditorSceneObject_WfcTileWithPermutations::FEditorSceneObject_WfcTileWithPermutations(
+			FWfcTilesetEditorScene& owner, FWfcTilesetEditorViewportClient& viewportClient,
+			const FTransform& rootTr,
+			double spacingBetweenTiles,
+			const FLinearColor& boundsColor, const FLinearColor& labelColor,
+			const UWfcTileset* tileset, int32 tileID,
+			bool visualizeTileData
+		)
+	: FEditorSceneObject(&owner)
+{
+	if (!IsValid(tileset) || !tileset->Tiles.Contains(tileID))
+		return;
+	const auto& tileData = tileset->Tiles[tileID];
+
+	//Each permutation is positioned on a grid centered at the origin
+	//    and scaled by the tile size.
+	double gridSpacing = tileset->TileLength + spacingBetweenTiles;
+	//Arrange the grid using a horizontal spiral outward from the origin.
+	int spiralLayer = 0,
+	    spiralEdgeAxis = 0,
+		spiralEdgeDir = -1,
+		spiralAlongEdge = 0;
+	for (const auto& wfcTr : tileData.GetSupportedTransforms())
+	{
+		//Compute which grid element we're at.
+		WFC::Vector3i gridIdx;
+		gridIdx[spiralEdgeAxis] = spiralEdgeDir * spiralLayer;
+		gridIdx[(spiralEdgeAxis + 1 % 2)] = spiralAlongEdge;
+		gridIdx.z = 0;
+		
+		//Advance the grid spiral.
+		spiralAlongEdge += 1;
+		if (spiralAlongEdge > spiralLayer)
+		{
+			//Innermost iteration is through the side (min vs max)
+			if (spiralLayer > 0 && spiralEdgeDir == -1)
+				spiralEdgeDir = 1;
+			//Secondmost inner iteration is through the axis (0=X vs 1=Y).
+			else if (spiralLayer > 0 && spiralEdgeAxis < 2)
+			{
+				spiralEdgeAxis += 1;
+				spiralEdgeDir = -1;
+			}
+			//Outermost iteration is through the layer (where 0 is the grid origin).
+			else
+			{
+				spiralLayer += 1;
+				spiralEdgeDir = -1;
+				spiralEdgeAxis = 0;
+			}
+			
+			spiralAlongEdge = -spiralLayer;
+		}
+
+		//Compose the different transforms together.
+		FTransform permutationTr{ FVector(gridIdx.x, gridIdx.y, gridIdx.z) * gridSpacing };
+		FTransform worldTr = UKismetMathLibrary::ComposeTransforms(
+			UKismetMathLibrary::ComposeTransforms(
+				UWfcUtils::WfcToFTransform({ wfcTr }),
+				permutationTr
+			),
+			rootTr
+		);
+
+		//Set up label data.
+		FTransform labelTr{
+			rootTr.GetRotation(),
+			worldTr.GetLocation() +
+				(rootTr.GetRotation().GetUpVector() * ((tileset->TileLength / 2) + 50)),
+			rootTr.GetScale3D()
+		};
+		FString labelStr = FString::Printf(
+			TEXT("%s%s"),
+			(wfcTr.Invert ? TEXT("Invert->\n") : TEXT("")),
+			*UEnum::GetValueAsString(static_cast<WFC_Rotations3D>(wfcTr.Rot))
+		);
+
+		//Create the visualizer.
+		permutations.Emplace(
+			FEditorSceneObject_WfcTile{
+				owner, viewportClient, worldTr,
+				boundsColor, tileset, tileID, visualizeTileData
+			},
+			FEditorTextComponent{
+				Owner, labelTr, labelStr, labelColor.ToFColorSRGB(),
+				EHTA_Center, EVRTA_TextBottom
+			},
+			wfcTr
+		);
+	}
+
+	//Set up an "overall label" describing the permutation set.
+	overallLabel.Emplace(
+		Owner,
+		FTransform{
+			rootTr.GetRotation(),
+			rootTr.GetLocation() +
+				(-rootTr.GetRotation().GetUpVector() *
+				    ((tileset->TileLength / 2.0) + 100.0f)),
+			rootTr.GetScale3D()
+		},
+		FString::Printf(
+			TEXT("%i permutations\n%i inverted permutations"),
+			permutations.Num(),
+			static_cast<int>(Algo::CountIf(permutations, [&](const auto& perm) { return perm.WfcTransform.Invert; }))
+		),
+		labelColor.ToFColorSRGB(),
+		EHTA_Center, EVRTA_TextTop
+	);
 }

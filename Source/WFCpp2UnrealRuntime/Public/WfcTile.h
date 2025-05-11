@@ -120,6 +120,7 @@ public:
 
 	//Overwrites the given Set to contain all transforms that can be done on this tile.
     void GetSupportedTransforms(TSet<FWFC_Transform3D>& output) const;
+	WFC::Tiled3D::TransformSet GetSupportedTransforms() const;
 
 	//Creates a POD tuple of this struct's trivially-copyable fields, for hashing and equality.
 	auto GetPODFields() const { return MakeTuple(

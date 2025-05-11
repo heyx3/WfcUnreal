@@ -1,11 +1,12 @@
 ﻿#pragma once
 
-#include <array>
-
-#include "WFC++/include/Tiled3D/Transform3D.h"
-#include "WfcTileset.h"
-
 #include "AdvancedPreviewScene.h"
+
+#include <array>
+#include <cstddef>
+
+#include "EditorSceneObjects.h"
+#include "WfcTileset.h"
 
 
 class UBoxComponent;
@@ -22,16 +23,27 @@ class UTextRenderComponent;
 class FWfcTilesetEditorScene : public FAdvancedPreviewScene
 {
 public:
+
+	bool VisualizeWithPermutations = false;
+	double PermutationSpacing = 500.0;
+	
     FWfcTilesetEditorScene(ConstructionValues cvs = ConstructionValues());
 
     //Call continuously so that this scene can respond to changes in tile data, camera, etc.
-    void Refresh(const UWfcTileset* tileset, TOptional<WfcTileID> tileID, const FVector& camPos,
+    void Refresh(UWfcTileset* tileset, TOptional<WfcTileID> tileID, const FVector& camPos,
                  class FWfcTilesetEditorViewportClient* owner);
     
 private:
     
     int32 chosenTileIdx;
     TWeakObjectPtr<class UWfcTileGameData> chosenTileData;
+
+	TVariant<std::nullptr_t,
+			 FEditorSceneObject_WfcTile,
+			 FEditorSceneObject_WfcTileWithPermutations
+			> viewMode;
 	
-	TUniquePtr<class WfcTileVisualizer> currentTileVisualizer;
+	TWeakObjectPtr<UWfcTileset> currentTileset;
+	TOptional<FWfcTile> currentTile;
+	TOptional<int> currentTileID;
 };

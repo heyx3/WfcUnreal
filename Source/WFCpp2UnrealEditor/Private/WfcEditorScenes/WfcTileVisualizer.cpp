@@ -10,13 +10,10 @@ namespace
 	TArray<TTuple<WfcTileDataPredicate, WfcTileVisualizerFactory>> VizFactories;
 }
 
-WfcTileVisualizer::WfcTileVisualizer(const FWfcTileVisualizerInputs& inputs, bool normalViz): FWfcTileVisualizerInputs(inputs)
+WfcTileVisualizer::WfcTileVisualizer(const FWfcTileVisualizerInputs& inputs)
+    : FWfcTileVisualizerInputs(inputs)
 {
-	if (normalViz)
-	{
-		tileBaseViz.Emplace(&inputs.EditorScene, inputs.TileTr, inputs.Tileset->TileLength / 2.0,
-							FLinearColor{ 0, 0, 0, 1 }, inputs.Tileset.Get(), inputs.TileIdx);
-	}
+
 }
 
 void WfcTileVisualizer::RegisterVisualizer(WfcTileDataPredicate isApplicable,

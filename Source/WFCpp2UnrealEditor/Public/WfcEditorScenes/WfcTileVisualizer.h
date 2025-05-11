@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 
-#include "EditorSceneObjects.h"
+#include "EditorSceneComponents.h"
 #include "WfcTileData.h"
 #include "WfcTileset.h"
 
@@ -38,7 +38,7 @@ class WFCPP2UNREALEDITOR_API WfcTileVisualizer : protected FWfcTileVisualizerInp
 {
 public:
 
-	WfcTileVisualizer(const FWfcTileVisualizerInputs& inputs, bool normalViz = true);
+	WfcTileVisualizer(const FWfcTileVisualizerInputs&);
 	virtual ~WfcTileVisualizer() { }
 
 	WfcTileVisualizer(const WfcTileVisualizer&) = delete;
@@ -62,8 +62,6 @@ public:
 
 protected:
 	virtual void UpdateTransform(const FTransform& oldTileTr, const FTransform& newTileTr) { }
-
-	TOptional<FEditorSceneObject_WfcTile> tileBaseViz;
 };
 
 #pragma endregion

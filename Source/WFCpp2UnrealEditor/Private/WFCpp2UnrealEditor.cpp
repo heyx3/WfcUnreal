@@ -9,6 +9,7 @@
 #include "IDetailChildrenBuilder.h"
 
 #include "AssetTypeActions_WfcTileset.h"
+#include "WFCpp2UnrealRuntime.h"
 #include "WfcTileData.h"
 #include "WfcTilesetEditor.h"
 #include "WfcEditorScenes/WfcTileVisualizer.h"
@@ -20,13 +21,13 @@ DEFINE_LOG_CATEGORY(LogWFCppEditor);
 const FName WfcTilesetEditorAppIdentifier = FName(TEXT("CustomAssetEditorApp"));
 
 
-class FWfcppEditorModule : public IWFCpp2UnrealEditorModule
+class FWfcpp2UnrealEditorModule : public IWFCpp2UnrealEditorModule
 {
 public:
 
 	virtual void StartupModule() override
 	{
-		UE_LOG(LogTemp, Warning, TEXT("StartupModule() WFC-editor"));
+		UE_LOG(LogWFCppEditor, Log, TEXT("StartupModule() WFC-editor"));
 		
 		menuExtensibilityManager = MakeShareable(new FExtensibilityManager);
 		toolBarExtensibilityManager = MakeShareable(new FExtensibilityManager);
@@ -42,7 +43,7 @@ public:
 	}
 	virtual void ShutdownModule() override
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ShutdownModule() WFC-editor"));
+		UE_LOG(LogWFCppEditor, Log, TEXT("ShutdownModule() WFC-editor"));
 
 		menuExtensibilityManager.Reset();
 		toolBarExtensibilityManager.Reset();
@@ -87,7 +88,7 @@ private:
 	}
 };
 
-IMPLEMENT_GAME_MODULE(FWfcppEditorModule, WfcppEditor);
+IMPLEMENT_GAME_MODULE(FWfcpp2UnrealEditorModule, Wfcpp2UnrealEditor);
 
 
 #undef LOCTEXT_NAMESPACE

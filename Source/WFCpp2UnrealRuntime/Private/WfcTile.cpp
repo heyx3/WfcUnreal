@@ -14,11 +14,17 @@ WFC::Tiled3D::FacePoints FWfcTileFace::GetPrototypeEdge(WFC::Tiled3D::FacePoints
 	return WFC::Tiled3D::MakeEdgeFacePoint(dir);
 }
 
+WFC::Tiled3D::TransformSet FWfcTile::GetSupportedTransforms() const
+{
+	auto output = ImplicitPermutations.Unwrap().GetExplicit();
+	for (auto p : PrecisePermutations)
+		output.Add(p.Unwrap());
+	return output;
+}
 void FWfcTile::GetSupportedTransforms(TSet<FWFC_Transform3D>& output) const
 {
 	output.Empty(); //This is important for BP calls; Unreal reuses collections without clearing them
-	output.Append(PrecisePermutations);
-
-	for (auto tr : ImplicitPermutations.Unwrap().GetExplicit())
-		output.Add({ tr });
+	
+	for (auto tr : GetSupportedTransforms())
+		output.Emplace(tr);
 }
