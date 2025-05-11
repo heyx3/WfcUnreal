@@ -5,16 +5,87 @@
 #include "WfcFacePrototype.generated.h"
 
 
-//ID's for points on a tile face, to identify symmetries and match with other faces.
-UENUM(BlueprintType)
-enum class PointSymmetry : uint8
-{
-	a = 0,
-	b = 1,
-	c = 2,
-	d = 3
-};
+//To be more user-friendly than the core WFC++ library,
+//    we make opinionated choices on how corner/edge ID's are configured.
+//
+//Each face prototype is given up to four ID's to assign to its corners and edges.
+//The first, default ID is an implicit 'null' which is not visualized,
+//    making it a good candidate for "empty space".
+//
+//The other three identifiers are sequentially opt-in, added by the designer as needed.
 
+
+UENUM(BlueprintType)
+enum class EWfcPointID : uint8
+{
+	null = 0,
+	p1 = 1,
+	p2 = 2,
+	p3 = 3
+};
+ENUM_RANGE_BY_COUNT(EWfcPointID, 4);
+
+//Definitions for a set of corners or edges on one tile face.
+USTRUCT(BlueprintType)
+struct WFCPP2UNREALRUNTIME_API FWfcFacePointDefs
+{
+	GENERATED_BODY()
+public:
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(InlineEditConditionToggle))
+	bool AddPoint1 = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditCondition="AddPoint1"))
+	FString NameOfPoint1 = TEXT("p1");
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditCondition="AddPoint1", EditConditionHides=true, InlineEditConditionToggle))
+	bool AddPoint2 = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditCondition="AddPoint2"))
+	FString NameOfPoint2 = TEXT("p2");
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditCondition="AddPoint2", EditConditionHides=true, InlineEditConditionToggle))
+	bool AddPoint3 = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditCondition="AddPoint3"))
+	FString NameOfPoint3 = TEXT("p3");
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	EWfcPointID PointAA = EWfcPointID::null;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	EWfcPointID PointAB = EWfcPointID::null;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	EWfcPointID PointBA = EWfcPointID::null;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	EWfcPointID PointBB = EWfcPointID::null;
+
+	
+	//Gets all defined points that are enabled for this face, not including the default 'null' point.
+	TArray<FString, TInlineAllocator<3>> GatherPoints() const;
+
+	//Gets the point ID at the given location.
+	EWfcPointID& PointAt(WFC::Tiled3D::FacePoints point);
+	EWfcPointID PointAt(WFC::Tiled3D::FacePoints point) const { return const_cast<FWfcFacePointDefs*>(this)->PointAt(point); }
+
+	//Returns null for the 'null' point ID.
+	const FString* GetName(EWfcPointID pointID) const;
+	//Returns null for the 'null' point ID.
+	const FString* GetName(WFC::Tiled3D::FacePoints point) const { return GetName(PointAt(point)); }
+
+	void PostScriptConstruct();
+	bool operator==(const FWfcFacePointDefs& d2) const
+	{
+		return GatherPoints() == d2.GatherPoints() &&
+			   PointAA == d2.PointAA && PointAB == d2.PointAB &&
+			   PointBA == d2.PointBA && PointBB == d2.PointBB;
+	}
+};
+template<>
+struct TStructOpsTypeTraits<FWfcFacePointDefs> : public TStructOpsTypeTraitsBase2<FWfcFacePointDefs>
+{
+	enum
+	{
+		WithIdenticalViaEquality = true,
+		WithPostScriptConstruct = true
+	};
+};
 
 //A specific face that tiles can have.
 //Defines symmetries and the ability to match with other copies of this face.
@@ -30,76 +101,25 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FString Nickname = "New Face";
 
-	//To make things more user-friendly than the underlying WFC++ data structures,
-	//    we make more opinionated choices.
-	//The first (and default) corner/edge identifier represents Null/unimportant.
-	//These will not be explicitly drawn in the tileset editor,
-	//      and make a good signifier for 'empty space'.
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	FString NameOfB = TEXT("b");
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	FString NameOfC = TEXT("c");
-	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	FString NameOfD = TEXT("D");
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FWfcFacePointDefs Corners;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FWfcFacePointDefs Edges;
 	
-
-	//The identifier for the corner on the 'min' side of both face axes.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	PointSymmetry CornerAA = PointSymmetry::a;
-	//The identifier for the corner on the 'min' side of the first axis (X or Y),
-	//    and the 'max' side of the second axis (Y or Z).
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	PointSymmetry CornerAB = PointSymmetry::a;
-	//The identifier for the corner on the 'max' side of the first axis (X or Y),
-	//    and the 'min' side of the second axis (Y or Z).
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	PointSymmetry CornerBA = PointSymmetry::a;
-	//The identifier for the corner on the 'max' side of both face axes.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	PointSymmetry CornerBB = PointSymmetry::a;
-	
-	//The identifier for the 'min' edge parallel to the first face axis.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	PointSymmetry EdgeAA = PointSymmetry::a;
-	//The identifier for the 'max' edge parallel to the first face axis.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	PointSymmetry EdgeAB = PointSymmetry::a;
-	//The identifier for the 'min' edge parallel to the second face axis.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	PointSymmetry EdgeBA = PointSymmetry::a;
-	//The identifier for the 'max' edge parallel to the second face axis.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	PointSymmetry EdgeBB = PointSymmetry::a;
-
-	PointSymmetry& GetCornerSymmetry(WFC::Tiled3D::FacePoints corner)
-	{
-		switch (corner)
-		{
-			case WFC::Tiled3D::FacePoints::AA: return CornerAA;
-			case WFC::Tiled3D::FacePoints::AB: return CornerAB;
-			case WFC::Tiled3D::FacePoints::BA: return CornerBA;
-			case WFC::Tiled3D::FacePoints::BB: return CornerBB;
-			default: check(false); return CornerAA;
-		}
-	}
-	PointSymmetry GetCornerSymmetry(WFC::Tiled3D::FacePoints corner) const { return const_cast<FWfcFacePrototype*>(this)->GetCornerSymmetry(corner); }
-	PointSymmetry& GetEdgeSymmetry(WFC::Tiled3D::FacePoints edge)
-	{
-		switch (edge)
-		{
-			case WFC::Tiled3D::FacePoints::AA: return EdgeAA;
-			case WFC::Tiled3D::FacePoints::AB: return EdgeAB;
-			case WFC::Tiled3D::FacePoints::BA: return EdgeBA;
-			case WFC::Tiled3D::FacePoints::BB: return EdgeBB;
-			default: check(false); return EdgeAA;
-		}
-	}
-	PointSymmetry GetEdgeSymmetry(WFC::Tiled3D::FacePoints edge) const { return const_cast<FWfcFacePrototype*>(this)->GetEdgeSymmetry(edge); }
-
 	WFC::Tiled3D::FaceIdentifiers Unwrap(int pointIdOffset) const;
-	//Returns nullptr for point A (because it represents a null/invisible identifier).
-	const FString* GetName(PointSymmetry point) const;
+
+	bool operator==(const FWfcFacePrototype& f2) const
+	{
+		return Nickname == f2.Nickname && Corners == f2.Corners && Edges == f2.Edges;
+	}
+};
+template<>
+struct TStructOpsTypeTraits<FWfcFacePrototype> : public TStructOpsTypeTraitsBase2<FWfcFacePrototype>
+{
+	enum
+	{
+		WithIdenticalViaEquality = true
+	};
 };
 
 //Face prototypes have a unique ID in a tile-set.

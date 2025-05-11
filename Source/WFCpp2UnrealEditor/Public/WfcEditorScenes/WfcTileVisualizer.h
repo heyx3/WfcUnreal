@@ -14,8 +14,8 @@ struct FWfcTileVisualizerInputs
 	const TWeakObjectPtr<const UWfcTileset> Tileset;
 
 	const int32 TileIdx;
-	const FWfcTile* GetTile() const { auto* t = Tileset.Get(); if (!t) return nullptr; return t->Tiles.Find(TileIdx); }
-	const UWfcTileGameData* GetTileGameData() const { auto* t = GetTile(); if (!t) return nullptr; return t->Data; }
+	const TOptional<FWfcTile> Tile;
+	const UWfcTileGameData* GetTileGameData() const { return (Tile.IsSet() ? Tile->Data : nullptr); }
 
 	FTransform TileTr;
 };

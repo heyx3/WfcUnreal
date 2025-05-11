@@ -35,6 +35,8 @@ public:
 	//Transforms a point on this face's edges into its corresponding point in the face prototype,
 	//    based on "PrototypeOrientation".
 	WFC::Tiled3D::FacePoints GetPrototypeEdge(WFC::Tiled3D::FacePoints thisEdge) const;
+
+	bool operator==(const FWfcTileFace& f2) const { return PrototypeID == f2.PrototypeID && PrototypeOrientation == f2.PrototypeOrientation; }
 };
 template<>
 struct TStructOpsTypeTraits<FWfcTileFace> : public TStructOpsTypeTraitsBase2<FWfcTileFace>
@@ -42,9 +44,11 @@ struct TStructOpsTypeTraits<FWfcTileFace> : public TStructOpsTypeTraitsBase2<FWf
 	enum
 	{
 		WithZeroConstructor = true,
-		WithNoDestructor = true
+		WithNoDestructor = true,
+		WithIdenticalViaEquality = true
 	};
 };
+inline uint32 GetTypeHash(const FWfcTileFace& f) { return GetTypeHash(MakeTuple(f.PrototypeID, f.PrototypeOrientation)); }
 
 
 //A specific tile.
@@ -79,56 +83,16 @@ public:
 	//If not empty, this name overrides the automatically-computed nickname.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FString NicknameOverride;
-	
-	//Specific transformations to support on this tile.
+
+	//A useful but less precise way of listing supported permutations on this tile.
+	//Combines with 'PrecisePermutations'.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transforms")
+	FWfcImplicitTransformSet ImplicitPermutations;
+	//Specific transformations to support on this tile,
+	//    along the 'ImplicitPermutations'.
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transforms")
 	TArray<FWFC_Transform3D> PrecisePermutations;
 
-	//NOTE: Supporting the more flexible system below requires knowing
-	//    what rotation comes from combining any other two rotations.
-	//      This is a pain in the ass to implement so for now I'm not.
-	/*
-	//Base supported permutations of this tile.
-	//Each of these can then be transformed by the 'supported transforms'
-	//    to build the full set of legal permutations.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transforms")
-	TArray<FWFC_Transform3D> BasePermutations = {
-		FWFC_Transform3D{ WFC_Rotations3D::None, false },
-		FWFC_Transform3D{ WFC_Rotations3D::None, true }
-	};
- 
-    //Whether to include all rotations of the 'base permutations' for this tile.
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transforms")
-    bool SupportAllRotations = false;
-    
-    //Whether to include all rotations of this tile by 90 degrees around the X axis.
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transforms", meta=(EditConditionHides, EditCondition="!SupportAllRotations"))
-	bool UseXAxisRotations = false;
-	//Whether to include all 180-degree rotations of this tile around the X axis.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transforms", meta=(EditConditionHides, EditCondition="!SupportAllRotations && !UseXAxisRotations"))
-	bool UseXAxisRotation180 = false;
-	//Whether to include all rotations of this tile by 90 degrees around the Y axis.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transforms", meta=(EditConditionHides, EditCondition="!SupportAllRotations"))
-	bool UseYAxisRotations = false;
-	//Whether to include all 180-degree rotations of this tile around the Y axis.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transforms", meta=(EditConditionHides, EditCondition="!SupportAllRotations && !UseXAxisRotations"))
-	bool UseYAxisRotation180 = false;
-	//Whether to include all rotations of this tile by 90 degrees around the Z axis.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transforms", meta=(EditConditionHides, EditCondition="!SupportAllRotations"))
-	bool UseZAxisRotations = true;
-	//Whether to include all 180-degree rotations of this tile around the Z axis.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transforms", meta=(EditConditionHides, EditCondition="!SupportAllRotations && !UseXAxisRotations"))
-	bool UseZAxisRotation180 = false;
-    //Whether to include all rotations of this tile around a pair of opposite edges.
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transforms", meta=(EditConditionHides, EditCondition="!SupportAllRotations"))
-	bool UseEdgeRotations = false;
-    //Whether to include all rotations of this tile around a pair of opposite corners.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Transforms", meta=(EditConditionHides, EditCondition="!SupportAllRotations"))
-	bool UseCornerRotations = false;
-
-	*/
-
-	
     FString GetDisplayName() const
     {
     	if (!NicknameOverride.IsEmpty())
@@ -156,4 +120,42 @@ public:
 
 	//Overwrites the given Set to contain all transforms that can be done on this tile.
     void GetSupportedTransforms(TSet<FWFC_Transform3D>& output) const;
+
+	//Creates a POD tuple of this struct's trivially-copyable fields, for hashing and equality.
+	auto GetPODFields() const { return MakeTuple(
+		MinX, MaxX, MinY, MaxY, MinZ, MaxZ, WeightU32, Data, ImplicitPermutations.Unwrap().GetExplicit().Bits()
+	); }
+	//Creates a tuple of pointers to this struct's non-trivially-copyable fields, for hashing and equality.
+	auto GetSpecialFields() const { return MakeTuple(
+		&PrecisePermutations
+	); }
+	bool operator==(const FWfcTile& t2) const
+	{
+		return GetPODFields() == t2.GetPODFields() &&
+			   PrecisePermutations == t2.PrecisePermutations;
+	}
 };
+template<>
+struct TStructOpsTypeTraits<FWfcTile> : public TStructOpsTypeTraitsBase2<FWfcTile>
+{
+	enum
+	{
+		WithIdenticalViaEquality = true
+	};
+};
+
+inline uint32 GetTypeHash(const FWfcTile& t)
+{
+	auto u = GetTypeHash(t.GetPODFields());
+	auto f = t.GetSpecialFields();
+	
+	const TArray<FWFC_Transform3D>& precisePermutations = *f.Get<0>();
+	u = GetTypeHash(MakeTuple(u, precisePermutations.Num()));
+	for (auto p : precisePermutations)
+		u = GetTypeHash(MakeTuple(u, p));
+
+	static_assert(TTupleArity<decltype(f)>::Value == 1,
+				  "Some 'special' fields were added or removed!");
+
+	return u;
+}

@@ -32,7 +32,7 @@ public class WFCpp2UnrealEditor : ModuleRules
         );
         
         PrivateIncludePathModuleNames.AddRange(new [] {
-            "Settings", "IntroTutorials",
+            "Settings",
             "AssetTools", "LevelEditor"
         });
         DynamicallyLoadedModuleNames.AddRange(new[] {

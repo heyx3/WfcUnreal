@@ -164,8 +164,6 @@ void UWfcGenerator::Start(const UWfcTileset* tiles,
 		return;
 	}
 
-    //TODO: Allocate reusable buffers for the input data setup, below.
-    
     //Assign unique point ID's based on the face prototypes.
 	//Edges and corners do not interchange, so they can reuse the same ID values.
     WFC::Tiled3D::PointID nextPointID = 1;
@@ -210,8 +208,8 @@ void UWfcGenerator::Start(const UWfcTileset* tiles,
                 auto localPoint = static_cast<WFC::Tiled3D::FacePoints>(pointI);
                 auto prototypeCorner = assetFace.GetPrototypeCorner(localPoint),
             		 prototypeEdge = assetFace.GetPrototypeEdge(localPoint);
-                auto cornerID = prototype.GetCornerSymmetry(prototypeCorner),
-            		 edgeID = prototype.GetEdgeSymmetry(prototypeEdge);
+                auto cornerID = prototype.Corners.PointAt(prototypeCorner),
+            		 edgeID = prototype.Edges.PointAt(prototypeEdge);
 
                 //Convert the 0-3 symmetry value stored in the asset,
                 //    into a unique index across all tile faces.

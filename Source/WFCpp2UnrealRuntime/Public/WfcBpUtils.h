@@ -37,6 +37,13 @@ public:
     UFUNCTION(BlueprintCallable, BlueprintPure, meta=(CompactNodeTitle="Rotator"))
 	static FRotator WfcToFRotator(WFC_Directions3D face);
 
+	//Can also be used for rotations (just make a transform with no inversion).
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	static FWFC_Transform3D CombineWfcTransforms(const FWFC_Transform3D& first, const FWFC_Transform3D& second)
+	{
+		return { first.Unwrap().Then(second.Unwrap()) };
+	}
+
 	//The special face prototype ID that represents 'null'.
 	UFUNCTION(BlueprintCallable, BlueprintPure, meta=(CompactNodeTitle="NULL face ID"))
 	static int FaceIDInvalid() { return (int)INVALID_FACE_ID; }

@@ -108,12 +108,14 @@ struct WFCPP2UNREALEDITOR_API FEditorPlaneComponent : public TEditorSceneCompone
 struct WFCPP2UNREALEDITOR_API FEditorArrowComponent : public TEditorSceneComponent<class UArrowComponent>
 {
 	FEditorArrowComponent(FPreviewScene* owner, const FTransform& transform,
-					      const FColor& color);
+					      const FColor& color,
+					      UMaterialInterface* material = nullptr);
 	
 	FEditorArrowComponent(FPreviewScene* owner,
 						  const FVector& base, const FVector& head,
-						  double thickness, const FColor& color)
-		: FEditorArrowComponent(owner, GetTransform(base, head, thickness), color)
+						  double thickness, const FColor& color,
+						  UMaterialInterface* material = nullptr)
+		: FEditorArrowComponent(owner, GetTransform(base, head, thickness), color, material)
 	{
 		
 	}

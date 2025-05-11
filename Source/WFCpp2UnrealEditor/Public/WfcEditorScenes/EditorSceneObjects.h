@@ -61,6 +61,7 @@ private:
 	TOptional<FEditorPlaneComponent> facePlane;
 	std::array<TOptional<FEditorTextComponent>, 4> cornerLabels, edgeLabels;
 	std::array<TOptional<FEditorArrowComponent>, 4> cornerArrows, edgeArrows;
+	std::array<EWfcPointID, 4> cornerIDs, edgeIDs;
 
 	float alphaScale = 1.0f;
 

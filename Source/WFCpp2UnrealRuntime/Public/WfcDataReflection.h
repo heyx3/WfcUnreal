@@ -222,6 +222,7 @@ public:
 		return Rot == t.Rot && Invert == t.Invert;
 	}
 
+	FWFC_Transform3D(const WFC::Tiled3D::Transform3D& tr) : FWFC_Transform3D(static_cast<WFC_Rotations3D>(tr.Rot), tr.Invert) { }
     FWFC_Transform3D(WFC_Rotations3D rot, bool inverted) :  Rot(rot), Invert(inverted) { }
     FWFC_Transform3D(WFC_Rotations3D rot) : FWFC_Transform3D(rot, false) { }
     FWFC_Transform3D() : FWFC_Transform3D(WFC_Rotations3D::None) { }
@@ -240,6 +241,88 @@ struct TStructOpsTypeTraits<FWFC_Transform3D> : public TStructOpsTypeTraitsBase2
 	{
 		WithZeroConstructor = true,
 		WithNoDestructor = true,
+		WithIdenticalViaEquality = true
+	};
+};
+
+//An intuitive set of tile permutations that come from taking a set of initial permutations
+//    and applying groups of transforms to them.
+USTRUCT(BlueprintType)
+struct FWfcImplicitTransformSet
+{
+	GENERATED_BODY()
+public:
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	TSet<FWFC_Transform3D> InitialPermutations = { { } };
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool AllowInversions = false;
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool AllowAllRotations = false;
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations"))
+	bool AllowAxisRotations = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations"))
+	bool AllowCornerRotations = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations"))
+	bool AllowEdgeRotations = false;
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations && !AllowAxisRotations"))
+	bool AllowAxisXRotations = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations && !AllowAxisRotations"))
+	bool AllowAxisYRotations = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations && !AllowAxisRotations"))
+	bool AllowAxisZRotations = false;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations && !AllowEdgeRotations"))
+	bool AllowEdgeXRotations = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations && !AllowEdgeRotations"))
+	bool AllowEdgeYRotations = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations && !AllowEdgeRotations"))
+	bool AllowEdgeZRotations = false;
+
+	WFC::Tiled3D::ImplicitTransformSet Unwrap() const
+	{
+		WFC::Tiled3D::ImplicitTransformSet set;
+		
+		set.InitialTransforms.Clear();
+		for (const auto& tr : InitialPermutations)
+			set.InitialTransforms.Add(tr.Unwrap());
+
+		set.AllowInversion = AllowInversions;
+		set.AllowAllRotations =  AllowAllRotations;
+
+		set.AllowAxisRots = AllowAxisRotations;
+		set.AllowCornerRots = AllowCornerRotations;
+		set.AllowEdgeRots = AllowEdgeRotations;
+
+		set.AllowAxisXRots = AllowAxisXRotations;
+		set.AllowAxisYRots = AllowAxisYRotations;
+		set.AllowAxisZRots = AllowAxisZRotations;
+
+		set.AllowEdgeXRots = AllowEdgeXRotations;
+		set.AllowEdgeYRots = AllowEdgeYRotations;
+		set.AllowEdgeZRots = AllowEdgeZRotations;
+
+		return set;
+	}
+
+	bool operator==(const FWfcImplicitTransformSet& s2) const
+	{
+		return Unwrap().GetExplicit() == s2.Unwrap().GetExplicit();
+	}
+};
+inline uint32_t GetTypeHash(const FWfcImplicitTransformSet& set)
+{
+	return static_cast<uint32_t>(set.Unwrap().GetExplicit().Bits());
+}
+template<>
+struct TStructOpsTypeTraits<FWfcImplicitTransformSet> : public TStructOpsTypeTraitsBase2<FWfcImplicitTransformSet>
+{
+	enum
+	{
 		WithIdenticalViaEquality = true
 	};
 };

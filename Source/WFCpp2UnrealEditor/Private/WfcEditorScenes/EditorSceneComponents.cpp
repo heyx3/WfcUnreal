@@ -14,6 +14,14 @@ FEditorSceneComponent::FEditorSceneComponent(FPreviewScene* _owner, const FTrans
 	check(owner);
 
 	componentUntyped = NewObject<UActorComponent>(GetTransientPackage(), type);
+	if (auto* sceneComponent = Cast<USceneComponent>(componentUntyped))
+	{
+		sceneComponent->SetVisibility(true);
+		sceneComponent->SetHiddenInGame(false);
+		sceneComponent->SetMobility(EComponentMobility::Type::Movable);
+		sceneComponent->MarkRenderStateDirty();
+	}
+
 	owner->AddComponent(componentUntyped.Get(), transform);
 }
 FEditorSceneComponent::~FEditorSceneComponent()
@@ -60,6 +68,7 @@ FEditorWireSphereComponent::FEditorWireSphereComponent(FPreviewScene* owner,
 	auto* component = GetComponent();
 
 	component->ShapeColor = color;
+	component->SetSphereRadius(1.0f);
 }
 FEditorWireBoxComponent::FEditorWireBoxComponent(FPreviewScene* owner,
 										         const FTransform& transform,
@@ -84,17 +93,31 @@ FEditorPlaneComponent::FEditorPlaneComponent(FPreviewScene* owner, const FTransf
 	));
 	if (IsValid(material))
 		component->SetMaterial(0, material);
-	
-	component->MarkRenderStateDirty();
 }
 FEditorArrowComponent::FEditorArrowComponent(FPreviewScene* owner,
 											 const FTransform& transform,
-											 const FColor& color)
-	: TEditorSceneComponent<UArrowComponent>(owner, transform)
+											 const FColor& color,
+											 UMaterialInterface* material)
+	: TEditorSceneComponent<UArrowComponent>(owner,
+											 //The transform's scaleX is interpreted as arrow length;
+											 //   scaleY/Z are interpreted as arrow size.
+											 FTransform{ transform.GetRotation(), transform.GetLocation(),
+														 FVector::OneVector })
 {
 	auto* component = GetComponent();
 	
+	float desiredLength = transform.GetScale3D().X;
+	float desiredThickness = FMath::Sqrt(FMath::Abs(transform.GetScale3D().Y * transform.GetScale3D().Z));
+	
 	component->SetArrowColor(color);
+	if (IsValid(material))
+		component->SetMaterial(0, material);
+	component->SetArrowSize(desiredThickness);
+	component->SetArrowLength(desiredLength);
+	component->SetVisibility(true);
+	component->bTreatAsASprite = false;
+	component->bHiddenInGame = false;
+	component->bIsScreenSizeScaled = false;
 }
 FEditorTextComponent::FEditorTextComponent(FPreviewScene* owner, const FTransform& transform,
 										   const FString& contents, const FColor& color,
@@ -107,20 +130,20 @@ FEditorTextComponent::FEditorTextComponent(FPreviewScene* owner, const FTransfor
 	component->HorizontalAlignment = alignHorz;
 	component->VerticalAlignment = alignVert;
 	component->SetText(FText::FromString(contents));
-
-	component->MarkRenderStateDirty();
+	component->SetWorldSize(100.0f);
 }
 
 FTransform FEditorArrowComponent::GetTransform(const FVector& base, const FVector& head,
 											   double thickness)
 {
+	double dist = (head - base).Length();
 	return {
 		UKismetMathLibrary::ComposeRotators(
 			UKismetMathLibrary::MakeRotFromX({ 1, 0, 0 }).GetInverse(),
 			UKismetMathLibrary::MakeRotFromX(head - base)
 		),
 		base,
-		FVector{ (head - base).Length(), thickness, thickness }
+		FVector{ dist / thickness, thickness, thickness }
 	};
 }
 FTransform FEditorPlaneComponent::GetTransform(const FVector& origin, const FVector2D& planeSize, const FVector& normal)

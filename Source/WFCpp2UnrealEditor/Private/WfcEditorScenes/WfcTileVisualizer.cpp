@@ -14,7 +14,7 @@ WfcTileVisualizer::WfcTileVisualizer(const FWfcTileVisualizerInputs& inputs, boo
 {
 	if (normalViz)
 	{
-		tileBaseViz.Emplace(&inputs.EditorScene, inputs.TileTr, inputs.Tileset->TileLength,
+		tileBaseViz.Emplace(&inputs.EditorScene, inputs.TileTr, inputs.Tileset->TileLength / 2.0,
 							FLinearColor{ 0, 0, 0, 1 }, inputs.Tileset.Get(), inputs.TileIdx);
 	}
 }
@@ -37,7 +37,6 @@ TUniquePtr<WfcTileVisualizer> WfcTileVisualizer::MakeVisualizer(const FWfcTileVi
 
 	return nullptr;
 }
-
 
 namespace WfcTileVisualizerStaticMesh
 {

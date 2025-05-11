@@ -19,5 +19,6 @@ void FWfcTile::GetSupportedTransforms(TSet<FWFC_Transform3D>& output) const
 	output.Empty(); //This is important for BP calls; Unreal reuses collections without clearing them
 	output.Append(PrecisePermutations);
 
-	//In the future we can hopefully support the more complex settings mentioned in the header.
+	for (auto tr : ImplicitPermutations.Unwrap().GetExplicit())
+		output.Add({ tr });
 }

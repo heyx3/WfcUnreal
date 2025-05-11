@@ -43,40 +43,56 @@ FEditorSceneObject_WfcFace::FEditorSceneObject_WfcFace(FPreviewScene* owner,
 	facePlane.Emplace(Owner, FTransform{ }, LoadFaceEditorMaterial(faceSide));
 	
 	//Generate components for the face corners.
-	auto doCorner = [&](WFC::Tiled3D::FacePoints pointLocation, PointSymmetry pointValue)
+	auto doCorner = [&](WFC::Tiled3D::FacePoints pointLocationTile)
 	{
-		if (pointValue != PointSymmetry::a)
+		auto pointLocationPrototype = WFC::Tiled3D::TransformFaceCorner(
+			pointLocationTile,
+			static_cast<WFC::Tiled3D::Directions3D>(faceSide),
+			WFC::Invert(static_cast<WFC::Transformations>(facePermutation))
+		);
+		
+		cornerIDs[pointLocationTile] = facePrototype.Corners.PointAt(pointLocationPrototype);
+		
+		const auto* pointLabel = facePrototype.Corners.GetName(pointLocationPrototype);
+		if (pointLabel != nullptr)
 		{
-			auto label = facePrototype.GetName(pointValue);
-			cornerArrows[pointLocation].Emplace(Owner, FTransform{ }, FColor{ });
-			cornerLabels[pointLocation].Emplace(Owner, FTransform{ }, *label, FColor{ });
+			cornerArrows[pointLocationTile].Emplace(Owner, FTransform{ }, FColor{ });
+			cornerLabels[pointLocationTile].Emplace(Owner, FTransform{ }, *pointLabel, FColor{ });
 
-			cornerArrows[pointLocation]->GetComponent()->bSelectable = false;
-			cornerLabels[pointLocation]->GetComponent()->bSelectable = false;
+			cornerArrows[pointLocationTile]->GetComponent()->bSelectable = false;
+			cornerLabels[pointLocationTile]->GetComponent()->bSelectable = false;
 		}
 	};
-	doCorner(WFC::Tiled3D::FacePoints::AA, facePrototype.CornerAA);
-	doCorner(WFC::Tiled3D::FacePoints::AB, facePrototype.CornerAB);
-	doCorner(WFC::Tiled3D::FacePoints::BA, facePrototype.CornerBA);
-	doCorner(WFC::Tiled3D::FacePoints::BB, facePrototype.CornerBB);
+	doCorner(WFC::Tiled3D::FacePoints::AA);
+	doCorner(WFC::Tiled3D::FacePoints::AB);
+	doCorner(WFC::Tiled3D::FacePoints::BA);
+	doCorner(WFC::Tiled3D::FacePoints::BB);
 
 	//Generate components for the face edges.
-	auto doEdge = [&](WFC::Tiled3D::FacePoints pointLocation, PointSymmetry pointValue)
+	auto doEdge = [&](WFC::Tiled3D::FacePoints pointLocationTile)
 	{
-		if (pointValue != PointSymmetry::a)
-		{
-			auto label = facePrototype.GetName(pointValue);
-			edgeArrows[pointLocation].Emplace(Owner, FTransform{ }, FColor{ });
-			edgeLabels[pointLocation].Emplace(Owner, FTransform{ }, *label, FColor{ });
+		auto pointLocationPrototype = WFC::Tiled3D::TransformFaceEdge(
+			pointLocationTile,
+			static_cast<WFC::Tiled3D::Directions3D>(faceSide),
+			WFC::Invert(static_cast<WFC::Transformations>(facePermutation))
+		);
 
-			edgeArrows[pointLocation]->GetComponent()->bSelectable = false;
-			edgeLabels[pointLocation]->GetComponent()->bSelectable = false;
+		edgeIDs[pointLocationTile] = facePrototype.Edges.PointAt(pointLocationPrototype);
+		
+		const auto* pointLabel = facePrototype.Edges.GetName(pointLocationPrototype);
+		if (pointLabel != nullptr)
+		{
+			edgeArrows[pointLocationTile].Emplace(Owner, FTransform{ }, FColor{ });
+			edgeLabels[pointLocationTile].Emplace(Owner, FTransform{ }, *pointLabel, FColor{ });
+
+			edgeArrows[pointLocationTile]->GetComponent()->bSelectable = false;
+			edgeLabels[pointLocationTile]->GetComponent()->bSelectable = false;
 		}
 	};
-	doEdge(WFC::Tiled3D::FacePoints::AA, facePrototype.EdgeAA);
-	doEdge(WFC::Tiled3D::FacePoints::AB, facePrototype.EdgeAB);
-	doEdge(WFC::Tiled3D::FacePoints::BA, facePrototype.EdgeBA);
-	doEdge(WFC::Tiled3D::FacePoints::BB, facePrototype.EdgeBB);
+	doEdge(WFC::Tiled3D::FacePoints::AA);
+	doEdge(WFC::Tiled3D::FacePoints::AB);
+	doEdge(WFC::Tiled3D::FacePoints::BA);
+	doEdge(WFC::Tiled3D::FacePoints::BB);
 
 	//Initialize visual state.
 	SetTileTransform(_tileTr);
@@ -88,25 +104,25 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 	std::array<FTransform, 4> cornerTrs, edgeTrs;
 
 	auto unwrappedFace = static_cast<WFC::Tiled3D::Directions3D>(faceSide);
-	int faceIdx = WFC::Tiled3D::GetAxisIndex(unwrappedFace);
-	int faceAxis1 = (faceIdx + 1) % 3,
-		faceAxis2 = (faceAxis1 + 1) % 3;
-	if (faceAxis2 < faceAxis1)
-		std::swap(faceAxis1, faceAxis2);
+	uint_fast8_t faceIdx, faceAxis1, faceAxis2;
+	WFC::Tiled3D::GetAxes(unwrappedFace, faceIdx, faceAxis1, faceAxis2);
 	
 	FVector faceOffset{ 0, 0, 0 };
 	faceOffset[faceIdx] = WFC::Tiled3D::IsMin(unwrappedFace) ? -cubeExtents : cubeExtents;
 	faceOffset = tileTr.Rotator().RotateVector(faceOffset);
 	faceTr = {
 		UKismetMathLibrary::ComposeRotators(
-			UWfcUtils::WfcToFRotator(faceSide),
+			UKismetMathLibrary::ComposeRotators(
+				FRotator{ 0, 180, 0 },
+				UWfcUtils::WfcToFRotator(faceSide)
+			),
 			tileTr.Rotator()
 		),
 		tileTr.GetLocation() + faceOffset,
 		tileTr.GetScale3D()
 	};
 	if (centerSphere.IsSet())
-		centerSphere->GetComponent()->SetWorldTransform(faceTr);
+		centerSphere->GetComponent()->SetWorldTransform(FTransform{ faceTr.Rotator(), faceTr.GetLocation(), FVector{ 10 }});
 	if (facePlane.IsSet())
 		facePlane->GetComponent()->SetWorldTransform(FEditorPlaneComponent::GetTransform(
 			faceTr.GetLocation(),
@@ -118,27 +134,33 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 	for (int faceAxis1Dir = 0; faceAxis1Dir < 2; ++faceAxis1Dir)
 		for (int faceAxis2Dir = 0; faceAxis2Dir < 2; ++faceAxis2Dir)
 		{
-			auto facePoint = WFC::Tiled3D::MakeCornerFacePoint(faceAxis1Dir == 0, faceAxis2Dir == 0);
-			facePoint = WFC::Tiled3D::TransformFaceCorner(facePoint,
-														  static_cast<WFC::Tiled3D::Directions3D>(faceSide),
-														  static_cast<WFC::Transformations>(facePermutation));
+			auto facePointTile = WFC::Tiled3D::MakeCornerFacePoint(faceAxis1Dir == 0, faceAxis2Dir == 0);
 			
 			FVector cornerOffset{ 0, 0, 0 };
 			cornerOffset[faceAxis1] = (faceAxis1Dir == 0) ? -cubeExtents : cubeExtents;
 			cornerOffset[faceAxis2] = (faceAxis2Dir == 0) ? -cubeExtents : cubeExtents;
 			cornerOffset = tileTr.Rotator().RotateVector(cornerOffset);
 
-			cornerTrs[facePoint] = {
+			cornerTrs[facePointTile] = {
 				faceTr.Rotator(),
 				faceTr.GetLocation() + cornerOffset,
 				faceTr.GetScale3D()
 			};
-			if (cornerLabels[facePoint].IsSet())
-				cornerLabels[facePoint]->GetComponent()->SetWorldTransform(cornerTrs[facePoint]);
-			if (cornerArrows[facePoint].IsSet())
-				cornerArrows[facePoint]->GetComponent()->SetWorldTransform(FEditorArrowComponent::GetTransform(
-					faceTr.GetLocation(), cornerTrs[facePoint].GetLocation(), 1.0
-				));
+			if (cornerLabels[facePointTile].IsSet())
+				cornerLabels[facePointTile]->GetComponent()->SetWorldTransform(cornerTrs[facePointTile]);
+			if (cornerArrows[facePointTile].IsSet())
+			{
+				auto* arrow = cornerArrows[facePointTile]->GetComponent();
+				
+				auto arrowTr = FEditorArrowComponent::GetTransform(
+					faceTr.GetLocation(),
+					cornerTrs[facePointTile].GetLocation(),
+					10.0
+				);
+				arrow->SetWorldTransform(FTransform{ arrowTr.GetRotation(), arrowTr.GetLocation() });
+				arrow->SetArrowSize(arrowTr.GetScale3D().Y);
+				arrow->SetArrowLength(arrowTr.GetScale3D().X);
+			}
 		}
 	
 	//Calculate edge transforms.
@@ -146,9 +168,6 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 		for (int edgeSide = 0; edgeSide < 2; ++edgeSide)
 		{
 			auto facePoint = WFC::Tiled3D::MakeEdgeFacePoint(edgeParallelAxis == 0, edgeSide == 0);
-			facePoint = WFC::Tiled3D::TransformFaceEdge(facePoint,
-														static_cast<WFC::Tiled3D::Directions3D>(faceSide),
-														static_cast<WFC::Transformations>(facePermutation));
 			
 			int faceEdgeParallelAxis = std::to_array({ faceAxis1, faceAxis2 })[edgeParallelAxis],
 				faceEdgePerpendicularAxis = std::to_array({ faceAxis1, faceAxis2 })[(edgeParallelAxis + 1) % 2];
@@ -165,20 +184,38 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 			if (edgeLabels[facePoint].IsSet())
 				edgeLabels[facePoint]->GetComponent()->SetWorldTransform(edgeTrs[facePoint]);
 			if (edgeArrows[facePoint].IsSet())
-				edgeArrows[facePoint]->GetComponent()->SetWorldTransform(FEditorArrowComponent::GetTransform(
-					faceTr.GetLocation(), edgeTrs[facePoint].GetLocation(), 1.0
-				));
+			{
+				auto* arrow = edgeArrows[facePoint]->GetComponent();
+				
+				auto arrowTr = FEditorArrowComponent::GetTransform(
+					faceTr.GetLocation(),
+					edgeTrs[facePoint].GetLocation(),
+					10.0
+				);
+				arrow->SetWorldTransform(FTransform{ arrowTr.GetRotation(), arrowTr.GetLocation() });
+				arrow->SetArrowSize(arrowTr.GetScale3D().Y);
+				arrow->SetArrowLength(arrowTr.GetScale3D().X);
+			}
 		}
 }
 void FEditorSceneObject_WfcFace::RebuildColors()
 {
 	auto rawFace = static_cast<WFC::Tiled3D::Directions3D>(faceSide);
 	int faceIdx = WFC::Tiled3D::GetAxisIndex(rawFace);
+	
 	auto faceColor = std::to_array({
 		FLinearColor{ 1, 0, 0 },
 		FLinearColor{ 0, 1, 0 },
 		FLinearColor{ 0, 0, 1 }
 	})[faceIdx];
+	auto pointIDTints = std::to_array({
+		FLinearColor{ 0, 0, 0, 1 },
+		FLinearColor{ 1, 0.5, 0.5, 1 },
+		FLinearColor{ 0.5, 1, 0.5, 1 },
+		FLinearColor{ 0.5, 0.5, 1, 1 }
+	});
+	FLinearColor cornerTint{ 0.85, 0.85, 0.85, 1 },
+				 edgeTint{ 0.5, 0.5, 0.5, 1 };
 
 	auto outputColor = [&](const FLinearColor& col) {
 		return (col * FLinearColor{ 1, 1, 1, alphaScale }).ToFColorSRGB();
@@ -193,12 +230,17 @@ void FEditorSceneObject_WfcFace::RebuildColors()
 	for (auto& label : edgeLabels)
 		if (label.IsSet())
 			label->GetComponent()->SetTextRenderColor(outputColor({ 1, 1, 1, 0.5f}));
-	for (auto& arrow : cornerArrows)
-		if (arrow.IsSet())
-			arrow->GetComponent()->SetArrowColor(outputColor({ 0.1f, 0.1f, 0.1f, 0.375f }));
-	for (auto& arrow : edgeArrows)
-		if (arrow.IsSet())
-			arrow->GetComponent()->SetArrowColor(outputColor({ 0.9f, 0.9f, 0.9f, 0.5f }));
+	for (int arrowI = 0; arrowI < 4; ++arrowI)
+	{
+		if (cornerArrows[arrowI].IsSet())
+			cornerArrows[arrowI]->GetComponent()->SetArrowColor(outputColor(
+				faceColor * cornerTint * pointIDTints[static_cast<int>(cornerIDs[arrowI])]
+			));
+		if (edgeArrows[arrowI].IsSet())
+			edgeArrows[arrowI]->GetComponent()->SetArrowColor((outputColor(
+				faceColor * edgeTint * pointIDTints[static_cast<int>(edgeIDs[arrowI])]
+			)));
+	}
 }
 
 FEditorSceneObject_WfcTile::FEditorSceneObject_WfcTile(FPreviewScene* owner,

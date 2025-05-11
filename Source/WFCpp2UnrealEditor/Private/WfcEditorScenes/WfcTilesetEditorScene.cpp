@@ -20,14 +20,10 @@ FWfcTilesetEditorScene::FWfcTilesetEditorScene(ConstructionValues cvs)
     auto& world = *GetWorld();
     auto& worldSettings = *world.GetWorldSettings();
 
-    //Start up the world.
-    worldSettings.NotifyBeginPlay();
-    worldSettings.NotifyMatchStarted();
-    worldSettings.SetActorHiddenInGame(false);
-    world.bBegunPlay = true;
-
     //Configure the scene.
+	world.bCreateRenderStateForHiddenComponentsWithCollsion = true;
     SetFloorVisibility(false);
+	SetEnvironmentVisibility(true);
 }
 
 void FWfcTilesetEditorScene::Refresh(const UWfcTileset* tileset, TOptional<WfcTileID> tile, const FVector& camPos,
@@ -36,20 +32,25 @@ void FWfcTilesetEditorScene::Refresh(const UWfcTileset* tileset, TOptional<WfcTi
     check(owner);
 
 	//Get the new tile data if it exists.
-	const FWfcTile* newTileData;
+	TOptional<FWfcTile> newTileData;
 	if (IsValid(tileset) && tile.IsSet())
-		newTileData = tileset->Tiles.Find(*tile);
-	else
-		newTileData = nullptr;
+	{
+		const auto* found = tileset->Tiles.Find(*tile);
+		if (found)
+			newTileData.Emplace(*found);
+	}
 
-	//If new and old tiles exist, check whether they're referencing different tiles.
+	//If new and old tiles exist, check whether the referenced tile has changed.
 	if (newTileData && currentTileVisualizer.IsValid() &&
 		(currentTileVisualizer->GetInputs().Tileset != tileset ||
-		 currentTileVisualizer->GetInputs().TileIdx != *tile))
+		 currentTileVisualizer->GetInputs().TileIdx != *tile ||
+		 currentTileVisualizer->GetInputs().Tile != tileset->Tiles[*tile] ||
+		 !currentTileVisualizer->GetInputs().Tileset->FacePrototypes.OrderIndependentCompareEqual(tileset->FacePrototypes)))
 	{
 		currentTileVisualizer = WfcTileVisualizer::MakeVisualizer({
 			*this, *owner,
-			tileset, *tile, FTransform{ }
+			tileset, *tile, newTileData,
+			FTransform{ }
 		});
 	}
 	//If new tile exists and the old doesn't, create a new visualizer.
@@ -57,7 +58,8 @@ void FWfcTilesetEditorScene::Refresh(const UWfcTileset* tileset, TOptional<WfcTi
 	{
 		currentTileVisualizer = WfcTileVisualizer::MakeVisualizer({
 			*this, *owner,
-			tileset, *tile, FTransform{ }
+			tileset, *tile, newTileData,
+			FTransform{ }
 		});
 	}
 	//If old tile exists and new one doesn't, clear it out.
