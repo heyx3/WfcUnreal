@@ -5,6 +5,7 @@
 #include "WfcDataReflection.h"
 #include "EditorSceneComponents.h"
 #include "WfcFacePrototype.h"
+#include "WfcTilesetEditorViewportClient.h"
 #include "WfcTileVisualizer.h"
 
 
@@ -72,7 +73,7 @@ private:
 	void RebuildTransform();
 };
 
-//An editor object that visualizes the symmetry info for a WFC tile.
+//Displays one WFC tile, with its symmetry information.
 struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcTile : public FEditorSceneObject
 {
 public:
@@ -100,7 +101,7 @@ private:
 	TUniquePtr<WfcTileVisualizer> tileDataVisualizer;
 };
 
-//An editor object that visualizes all supported permutations of a WFC tile.
+//Displays all supported permutations of one WFC tile.
 struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcTileWithPermutations : public FEditorSceneObject
 {
 public:
@@ -124,4 +125,35 @@ private:
 	};
 	TArray<Permutation, TInlineAllocator<WFC::Tiled3D::N_TRANSFORMS>> permutations;
 	TOptional<FEditorTextComponent> overallLabel;
+};
+
+struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcTileWithMatches : public FEditorSceneObject
+{
+public:
+
+	FEditorSceneObject_WfcTileWithMatches(FWfcTilesetEditorScene& owner, FWfcTilesetEditorViewportClient& viewportClient,
+										  const FTransform& tr, double spacingBetweenTiles,
+										  const FLinearColor& boundsColor, const FLinearColor& labelColor,
+										  const class UWfcTileset* tileset, int32 tileID, const FWFC_Transform3D& permutation,
+										  const TSet<WFC_Directions3D>& facesToMatchAfterPermutation,
+										  bool visualizeTileData = true);
+
+private:
+
+	TOptional<UWfcTileset::Unwrapped> libraryTilesetData;
+	TOptional<FEditorSceneObject_WfcTile> sourceTile;
+
+	TArray<FEditorTextComponent> faceLabels;
+	
+	struct Match
+	{
+		int32 TileID;
+		FWFC_Transform3D Permutation;
+		
+		WFC_Directions3D SrcFaceToMatch;
+		
+		FEditorSceneObject_WfcTile EditorObject;
+		FEditorTextComponent Label;
+	};
+	TArray<Match> matches;
 };

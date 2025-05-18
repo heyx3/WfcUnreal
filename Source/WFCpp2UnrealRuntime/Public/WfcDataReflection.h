@@ -94,10 +94,9 @@ enum class WFC_Rotations3D : uint8
 //    for example if all corners and faces have the same ID
 //    then all permutations of this face are equivalent.
 USTRUCT(BlueprintType)
-struct FWFC_Face
+struct WFCPP2UNREALRUNTIME_API FWFC_Face
 {
 	GENERATED_BODY()
-
 public:
 
 	//The corner on the 'min' side of both face axes.
@@ -163,7 +162,7 @@ struct TStructOpsTypeTraits<FWFC_Face> : public TStructOpsTypeTraitsBase2<FWFC_F
 
 //Symmetry/face-matching data for all 6 faces of a tile.
 USTRUCT(BlueprintType)
-struct FWFC_Cube
+struct WFCPP2UNREALRUNTIME_API FWFC_Cube
 {
 	GENERATED_BODY()
 
@@ -206,7 +205,7 @@ inline uint32 GetTypeHash(const FWFC_Cube& cube) { return GetTypeHash(MakeTuple(
 //A transformation that can be done to a cube (while keeping it axis-aligned).
 //Defines hashing and equality.
 USTRUCT(BlueprintType)
-struct FWFC_Transform3D
+struct WFCPP2UNREALRUNTIME_API FWFC_Transform3D
 {
 	GENERATED_BODY()
 public:
@@ -222,13 +221,22 @@ public:
 		return Rot == t.Rot && Invert == t.Invert;
 	}
 
-	FWFC_Transform3D(const WFC::Tiled3D::Transform3D& tr) : FWFC_Transform3D(static_cast<WFC_Rotations3D>(tr.Rot), tr.Invert) { }
+    FWFC_Transform3D() = default;
     FWFC_Transform3D(WFC_Rotations3D rot, bool inverted) :  Rot(rot), Invert(inverted) { }
     FWFC_Transform3D(WFC_Rotations3D rot) : FWFC_Transform3D(rot, false) { }
-    FWFC_Transform3D() : FWFC_Transform3D(WFC_Rotations3D::None) { }
+	FWFC_Transform3D(const WFC::Tiled3D::Transform3D& tr) : Rot(static_cast<WFC_Rotations3D>(tr.Rot)), Invert(tr.Invert) { }
 
     WFC::Tiled3D::Transform3D Unwrap() const { return { Invert, static_cast<WFC::Tiled3D::Rotations3D>(Rot) }; }
     FTransform ToFTransform() const;
+	
+	FString ToString() const
+	{
+		return FString::Printf(
+			TEXT("%sRot%s"),
+			Invert ? TEXT("Invert->") : TEXT(""),
+			*UEnum::GetValueAsString(Rot).RightChop(13) //Remove the 'Rotations3D::'
+		);
+	}
 };
 inline uint32 GetTypeHash(const FWFC_Transform3D& t)
 {
@@ -248,7 +256,7 @@ struct TStructOpsTypeTraits<FWFC_Transform3D> : public TStructOpsTypeTraitsBase2
 //An intuitive set of tile permutations that come from taking a set of initial permutations
 //    and applying groups of transforms to them.
 USTRUCT(BlueprintType)
-struct FWfcImplicitTransformSet
+struct WFCPP2UNREALRUNTIME_API FWfcImplicitTransformSet
 {
 	GENERATED_BODY()
 public:
@@ -282,6 +290,10 @@ public:
 	bool AllowEdgeYRotations = false;
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations && !AllowEdgeRotations"))
 	bool AllowEdgeZRotations = false;
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	TSet<FWFC_Transform3D> SpecificAllowedTransforms = { };
+	
 
 	WFC::Tiled3D::ImplicitTransformSet Unwrap() const
 	{
@@ -305,6 +317,9 @@ public:
 		set.AllowEdgeXRots = AllowEdgeXRotations;
 		set.AllowEdgeYRots = AllowEdgeYRotations;
 		set.AllowEdgeZRots = AllowEdgeZRotations;
+
+		for (const auto& tr : SpecificAllowedTransforms)
+			set.SpecificAllowedTransforms.Add(tr.Unwrap());
 
 		return set;
 	}

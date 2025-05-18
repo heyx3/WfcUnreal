@@ -3,7 +3,20 @@
 #include "GameFramework/WorldSettings.h"
 
 #include "WFCpp2UnrealEditor.h"
+#include "Kismet/BlueprintSetLibrary.h"
+#include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
 
+
+template<typename TSet>
+static bool SetsAreEqual(const TSet& a, const TSet& b)
+{
+	if (a.Num() != b.Num())
+		return false;
+	for (const auto& x : a)
+		if (!b.Contains(x))
+			return false;
+	return true;
+}
 
 FWfcTilesetEditorScene::FWfcTilesetEditorScene(ConstructionValues cvs)
     : FAdvancedPreviewScene(cvs)
@@ -31,50 +44,65 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 			newTileData.Emplace(*found);
 	}
 
-	auto refreshViz = [&]()
+	//If existing tile data needs to be replaced (or created), then do so.
+	if (newTileData && (
+			currentViewMode != Mode ||
+			currentTileset.Get() != tileset ||
+			!currentTile.IsSet() || !currentTileID.IsSet() ||
+			*newTileData != *currentTile || *tile != *currentTileID ||
+			!currentTileset->FacePrototypes.OrderIndependentCompareEqual(tileset->FacePrototypes) ||
+			(viewMode.IsType<FEditorSceneObject_WfcTileWithMatches>() &&
+				!SetsAreEqual(currentFacesToMatch, FacesToMatchAgainst))
+		))
 	{
 		check(newTileData.IsSet());
 		currentTileset = { tileset };
 		currentTileID = *tile;
-		currentTile = currentTileset->Tiles[*currentTileID];
-		
-		if (VisualizeWithPermutations)	
+		currentTile = *newTileData;
+		currentFacesToMatch = FacesToMatchAgainst;
+
+		switch (Mode)
 		{
-			viewMode.Emplace<FEditorSceneObject_WfcTileWithPermutations>(
-				*this, *owner,
-				FTransform{ }, PermutationSpacing,
-				FLinearColor{ 0, 0, 0, 1 }, FLinearColor{ 0, 0, 0, 1 },
-				tileset, *tile
-			);
+			case EWfcTilesetEditorMode::Tile:
+				viewMode.Emplace<FEditorSceneObject_WfcTile>(
+					*this, *owner,
+					FTransform{ }, FLinearColor{ 0, 0, 0, 1 },
+					tileset, *tile
+				);
+			break;
+			case EWfcTilesetEditorMode::Permutations:
+				viewMode.Emplace<FEditorSceneObject_WfcTileWithPermutations>(
+					*this, *owner,
+					FTransform{ }, SpacingBetweenTiles,
+					FLinearColor{ 0, 0, 0, 1 }, FLinearColor{ 0, 0, 0, 1 },
+					tileset, *tile
+				);
+			break;
+			case EWfcTilesetEditorMode::Matches:
+				viewMode.Emplace<FEditorSceneObject_WfcTileWithMatches>(
+					*this, *owner,
+					FTransform{ }, SpacingBetweenTiles,
+					FLinearColor{ 0, 0, 0, 1 }, FLinearColor{ 0, 0, 0, 1 },
+					tileset, *tile,
+					PermutationToMatchAgainst, FacesToMatchAgainst
+				);
+			break;
+			
+			default:
+			    check(false);
+				viewMode.Emplace<std::nullptr_t>(nullptr);
+			break;
 		}
-		else
-		{
-			viewMode.Emplace<FEditorSceneObject_WfcTile>(
-				*this, *owner,
-				FTransform{ }, FLinearColor{ 0, 0, 0, 1 },
-				tileset, *tile
-			);
-		}
-	};
-	
-	//If new and old tiles exist, check whether the referenced tile has changed.
-	if (newTileData && currentTileset.IsValid() &&
-		(VisualizeWithPermutations != viewMode.IsType<FEditorSceneObject_WfcTileWithPermutations>() ||
-		 currentTileset.Get() != tileset ||
-		 !currentTile.IsSet() || *newTileData != *currentTile ||
-		 !currentTileID.IsSet() || *tile != *currentTileID ||
-		 currentTileset->FacePrototypes.OrderIndependentCompareEqual(tileset->FacePrototypes)))
-	{
-		refreshViz();
+
+		currentViewMode = Mode;
+		owner->RedrawRequested(owner->Viewport);
 	}
-	//If new tile exists and the old doesn't, create a new visualizer.
-	else if (newTileData && viewMode.IsType<std::nullptr_t>())
+	else if (!newTileData)
 	{
-		refreshViz();
-	}
-	//If old tile exists and new one doesn't, clear it out.
-	else if (!newTileData && !viewMode.IsType<std::nullptr_t>())
-	{
+		currentTileset.Reset();
+		currentTile.Reset();
+		currentTileID.Reset();
+		currentViewMode.Reset();
 		viewMode.Set<std::nullptr_t>(nullptr);
 	}
 

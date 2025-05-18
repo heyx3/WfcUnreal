@@ -8,10 +8,24 @@
 #include "EditorSceneObjects.h"
 #include "WfcTileset.h"
 
+#include "WfcTilesetEditorScene.generated.h"
+
 
 class UBoxComponent;
 class USphereComponent;
 class UTextRenderComponent;
+
+
+UENUM()
+enum class EWfcTilesetEditorMode : uint8
+{
+	Tile,
+	Permutations,
+	Matches,
+
+	COUNT UMETA(Hidden)
+};
+ENUM_RANGE_BY_COUNT(EWfcTilesetEditorMode, static_cast<int64_t>(EWfcTilesetEditorMode::COUNT));
 
 //Based on this wonderful tutorial:
 //  https://easycomplex-tech.com/blog/Unreal/AssetEditor/UEAssetEditorDev-AssetEditorPreview/
@@ -24,8 +38,10 @@ class FWfcTilesetEditorScene : public FAdvancedPreviewScene
 {
 public:
 
-	bool VisualizeWithPermutations = false;
-	double PermutationSpacing = 500.0;
+	EWfcTilesetEditorMode Mode = EWfcTilesetEditorMode::Tile;
+	double SpacingBetweenTiles = 500.0;
+	FWFC_Transform3D PermutationToMatchAgainst;
+	TSet<WFC_Directions3D> FacesToMatchAgainst = { WFC_Directions3D::MaxX };
 	
     FWfcTilesetEditorScene(ConstructionValues cvs = ConstructionValues());
 
@@ -40,10 +56,13 @@ private:
 
 	TVariant<std::nullptr_t,
 			 FEditorSceneObject_WfcTile,
-			 FEditorSceneObject_WfcTileWithPermutations
+			 FEditorSceneObject_WfcTileWithPermutations,
+			 FEditorSceneObject_WfcTileWithMatches
 			> viewMode;
 	
 	TWeakObjectPtr<UWfcTileset> currentTileset;
 	TOptional<FWfcTile> currentTile;
 	TOptional<int> currentTileID;
+	TOptional<EWfcTilesetEditorMode> currentViewMode;
+	TSet<WFC_Directions3D> currentFacesToMatch;
 };

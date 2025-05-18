@@ -21,7 +21,7 @@ DEFINE_LOG_CATEGORY(LogWFCppEditor);
 const FName WfcTilesetEditorAppIdentifier = FName(TEXT("CustomAssetEditorApp"));
 
 
-class FWfcpp2UnrealEditorModule : public IWFCpp2UnrealEditorModule
+class FWFCpp2UnrealEditorModule : public IWFCpp2UnrealEditorModule
 {
 public:
 
@@ -37,8 +37,6 @@ public:
 
 	    //Register a custom Properties widget for tilesets.
 	    auto& propEditorModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
-	    // propEditorModule.RegisterCustomClassLayout(UWfcTileset::StaticClass()->GetFName(),
-	    //                                            FOnGetDetailCustomizationInstance::CreateLambda([]() { return MakeShared(FTilesetDetailsCustomization()); }));
 	    //TODO: Re-enable this
 	}
 	virtual void ShutdownModule() override
@@ -88,7 +86,7 @@ private:
 	}
 };
 
-IMPLEMENT_GAME_MODULE(FWfcpp2UnrealEditorModule, Wfcpp2UnrealEditor);
+IMPLEMENT_GAME_MODULE(FWFCpp2UnrealEditorModule, WFCpp2UnrealEditor);
 
 
 #undef LOCTEXT_NAMESPACE

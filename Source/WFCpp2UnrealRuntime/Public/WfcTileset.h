@@ -42,6 +42,28 @@ public:
 	int GetFacePrototype(const FString& nickname, bool& foundFace) const;
 	TOptional<int> GetFacePrototype(const FString& nickname) const;
 
+	struct Unwrapped
+	{
+		std::vector<WFC::Tiled3D::Tile> Tiles;
+		TArray<WfcTileID> WfcTileIDs;
+		TMap<WfcTileID, WFC::Tiled3D::TileIdx> WfcTileIDByUnrealID;
+
+		//Each face prototype is given four unique point ID's (re-used by corners and edges),
+		//    even if it doesn't use all four.
+		TMap<WfcFacePrototypeID, WFC::Tiled3D::PointID> WfcFacePrototypeFirstIDs;
+
+		//Internal buffer; not part of the unwrapped data.
+		TSet<FWFC_Transform3D> _supportedTransforms;
+		//Internal buffer; not part of the unwrapped data.
+		TSet<int32> _sortedUnrealIDs;
+	};
+	//Converts this tileset into a plain WFC library tileset.
+	//Guaranteed to produce the same thing every time it's called (same tile/point ID's).
+	Unwrapped Unwrap() const { Unwrapped u; Unwrap(u); return u; }
+	//Converts this tileset into a plain WFC library tileset.
+	//Guaranteed to produce the same thing every time it's called (same tile/point ID's).
+	void Unwrap(Unwrapped& output) const;
+
 	
 	//Provide callbacks to the editor for when this asset changes.
 	#if WITH_EDITOR

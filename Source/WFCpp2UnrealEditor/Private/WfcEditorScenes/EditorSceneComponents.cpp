@@ -2,6 +2,7 @@
 
 #include <WFC++/include/Tiled3D/Transform3D.h>
 
+#include "WFCpp2UnrealEditor.h"
 #include "Components/ArrowComponent.h"
 #include "Components/SphereComponent.h"
 #include "Components/BoxComponent.h"
@@ -26,8 +27,9 @@ FEditorSceneComponent::FEditorSceneComponent(FPreviewScene* _owner, const FTrans
 }
 FEditorSceneComponent::~FEditorSceneComponent()
 {
+	//NOTE: the usual DestroyComponent() can lead to crashes when closing the editor scene.
 	if (componentUntyped.IsValid())
-		 owner->RemoveComponent(componentUntyped.Get());
+		owner->RemoveComponent(componentUntyped.Get());
 	
 	//In debug builds, null out the component pointer.
 	#if DO_CHECK

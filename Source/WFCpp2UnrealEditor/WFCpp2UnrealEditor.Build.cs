@@ -11,7 +11,12 @@ public class WFCpp2UnrealEditor : ModuleRules
             {
                 "Core",
                 "WFCpp2",
-                "WFCpp2UnrealRuntime"
+                "WFCpp2UnrealRuntime",
+                "SlateCore", "Slate", "InputCore",
+                "KismetWidgets", "ToolWidgets", "AdvancedWidgets",
+                "EditorWidgets", "DesktopWidgets",
+                "PropertyEditor",
+                "SharedSettingsWidgets"
             }
         );
 

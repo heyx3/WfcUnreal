@@ -8,6 +8,7 @@
 
 #include "WfcTileset.h"
 #include "WfcBpUtils.h"
+#include "WFCpp2UnrealEditor.h"
 #include "WfcEditorScenes/WfcTileVisualizer.h"
 #include "WfcEditorScenes/WfcTilesetEditorScene.h"
 #include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
@@ -109,10 +110,10 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 	auto unwrappedFace = static_cast<WFC::Tiled3D::Directions3D>(faceSide);
 	uint_fast8_t faceIdx, faceAxis1, faceAxis2;
 	WFC::Tiled3D::GetAxes(unwrappedFace, faceIdx, faceAxis1, faceAxis2);
-	
+
 	FVector faceOffset{ 0, 0, 0 };
 	faceOffset[faceIdx] = WFC::Tiled3D::IsMin(unwrappedFace) ? -cubeExtents : cubeExtents;
-	faceOffset = tileTr.Rotator().RotateVector(faceOffset);
+	faceOffset = tileTr.TransformVector(faceOffset);
 	faceTr = {
 		UKismetMathLibrary::ComposeRotators(
 			UKismetMathLibrary::ComposeRotators(
@@ -142,7 +143,7 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 			FVector cornerOffset{ 0, 0, 0 };
 			cornerOffset[faceAxis1] = (faceAxis1Dir == 0) ? -cubeExtents : cubeExtents;
 			cornerOffset[faceAxis2] = (faceAxis2Dir == 0) ? -cubeExtents : cubeExtents;
-			cornerOffset = tileTr.Rotator().RotateVector(cornerOffset);
+			cornerOffset = tileTr.TransformVector(cornerOffset);
 
 			cornerTrs[facePointTile] = {
 				faceTr.Rotator(),
@@ -186,7 +187,7 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 		
 			FVector edgeOffset{ 0, 0, 0 };
 			edgeOffset[faceEdgePerpendicularAxis] = (edgeSide == 0) ? -cubeExtents : cubeExtents;
-			edgeOffset = tileTr.Rotator().RotateVector(edgeOffset);
+			edgeOffset = tileTr.TransformVector(edgeOffset);
 
 			edgeTrs[facePoint] = {
 				faceTr.Rotator(),
@@ -309,8 +310,7 @@ void FEditorSceneObject_WfcTile::SetTransform(const FTransform& newTr)
 
 FEditorSceneObject_WfcTileWithPermutations::FEditorSceneObject_WfcTileWithPermutations(
 			FWfcTilesetEditorScene& owner, FWfcTilesetEditorViewportClient& viewportClient,
-			const FTransform& rootTr,
-			double spacingBetweenTiles,
+			const FTransform& rootTr, double spacingBetweenTiles,
 			const FLinearColor& boundsColor, const FLinearColor& labelColor,
 			const UWfcTileset* tileset, int32 tileID,
 			bool visualizeTileData
@@ -325,6 +325,9 @@ FEditorSceneObject_WfcTileWithPermutations::FEditorSceneObject_WfcTileWithPermut
 	//    and scaled by the tile size.
 	double gridSpacing = tileset->TileLength + spacingBetweenTiles;
 	//Arrange the grid using a horizontal spiral outward from the origin.
+	UE_LOG(LogWFCppEditor, Log,
+		   TEXT("Positioning %i permutations of tile %i"),
+		   tileData.GetSupportedTransforms().Size(), tileID);
 	int spiralLayer = 0,
 	    spiralEdgeAxis = 0,
 		spiralEdgeDir = -1,
@@ -334,18 +337,28 @@ FEditorSceneObject_WfcTileWithPermutations::FEditorSceneObject_WfcTileWithPermut
 		//Compute which grid element we're at.
 		WFC::Vector3i gridIdx;
 		gridIdx[spiralEdgeAxis] = spiralEdgeDir * spiralLayer;
-		gridIdx[(spiralEdgeAxis + 1 % 2)] = spiralAlongEdge;
+		gridIdx[(spiralEdgeAxis + 1) % 2] = spiralAlongEdge;
 		gridIdx.z = 0;
+		UE_LOG(LogWFCppEditor, Log,
+			   TEXT("\tPermutation %s : {%i, %i, %i} / %i|%i:%i|%i"),
+		       *FString::Printf(
+					TEXT("%s%s"),
+					(wfcTr.Invert ? TEXT("Invert->\n") : TEXT("")),
+					*UEnum::GetValueAsString(static_cast<WFC_Rotations3D>(wfcTr.Rot))
+			   ),
+			   gridIdx.x, gridIdx.y, gridIdx.z,
+			   spiralLayer, spiralEdgeAxis, spiralEdgeDir, spiralAlongEdge);
 		
+		int cornerOffset = spiralEdgeAxis; //0 for first axis, 1 for second; helps avoid duplicate corner usage when going along second axis
 		//Advance the grid spiral.
 		spiralAlongEdge += 1;
-		if (spiralAlongEdge > spiralLayer)
+		if (spiralAlongEdge > spiralLayer - cornerOffset)
 		{
 			//Innermost iteration is through the side (min vs max)
 			if (spiralLayer > 0 && spiralEdgeDir == -1)
 				spiralEdgeDir = 1;
 			//Secondmost inner iteration is through the axis (0=X vs 1=Y).
-			else if (spiralLayer > 0 && spiralEdgeAxis < 2)
+			else if (spiralLayer > 0 && spiralEdgeAxis < 1)
 			{
 				spiralEdgeAxis += 1;
 				spiralEdgeDir = -1;
@@ -357,8 +370,9 @@ FEditorSceneObject_WfcTileWithPermutations::FEditorSceneObject_WfcTileWithPermut
 				spiralEdgeDir = -1;
 				spiralEdgeAxis = 0;
 			}
+			cornerOffset = spiralEdgeAxis; //Refresh this value
 			
-			spiralAlongEdge = -spiralLayer;
+			spiralAlongEdge = -spiralLayer + cornerOffset;
 		}
 
 		//Compose the different transforms together.
@@ -379,9 +393,9 @@ FEditorSceneObject_WfcTileWithPermutations::FEditorSceneObject_WfcTileWithPermut
 			rootTr.GetScale3D()
 		};
 		FString labelStr = FString::Printf(
-			TEXT("%s%s"),
+			TEXT("%sRot%s"),
 			(wfcTr.Invert ? TEXT("Invert->\n") : TEXT("")),
-			*UEnum::GetValueAsString(static_cast<WFC_Rotations3D>(wfcTr.Rot))
+			*UEnum::GetValueAsString(static_cast<WFC_Rotations3D>(wfcTr.Rot)).RightChop(17) //Chop out 'WFC_Rotations3D::'
 		);
 
 		//Create the visualizer.
@@ -416,4 +430,149 @@ FEditorSceneObject_WfcTileWithPermutations::FEditorSceneObject_WfcTileWithPermut
 		labelColor.ToFColorSRGB(),
 		EHTA_Center, EVRTA_TextTop
 	);
+}
+
+FEditorSceneObject_WfcTileWithMatches::FEditorSceneObject_WfcTileWithMatches(
+			FWfcTilesetEditorScene& owner, FWfcTilesetEditorViewportClient& viewportClient,
+			const FTransform& rootTr, double spacingBetweenTiles,
+			const FLinearColor& boundsColor, const FLinearColor& labelColor,
+			const UWfcTileset* tileset, int32 tileID, const FWFC_Transform3D& permutation,
+			const TSet<WFC_Directions3D>& facesToMatchAfterPermutation,
+			bool visualizeTileData
+		)
+	: FEditorSceneObject(&owner)
+{
+	if (!IsValid(tileset) || !tileset->Tiles.Contains(tileID))
+		return;
+	
+	libraryTilesetData.Emplace();
+	tileset->Unwrap(*libraryTilesetData);
+
+	const auto& tileData = tileset->Tiles[tileID];
+	sourceTile.Emplace(owner, viewportClient,
+				       UKismetMathLibrary::ComposeTransforms(
+				       		rootTr,
+				       		permutation.ToFTransform()
+				       ),
+				       boundsColor,
+					   tileset, tileID, visualizeTileData);
+
+	for (auto _srcFace : facesToMatchAfterPermutation)
+	{
+		auto srcFace = static_cast<WFC::Tiled3D::Directions3D>(_srcFace),
+			 destFace = WFC::Tiled3D::GetOpposite(srcFace);
+
+		const auto& libraryTile = libraryTilesetData->Tiles[libraryTilesetData->WfcTileIDByUnrealID[tileID]];
+		auto facePoints = WFC::Tiled3D::GetFace(libraryTile.Data, permutation.Unwrap(), srcFace).Points;
+
+		int matchI1 = 1;
+		for (const auto& [matchTileID, matchTileData] : tileset->Tiles)
+		{
+			for (const auto& matchTilePermutation : matchTileData.GetSupportedTransforms())
+			{
+				auto matchLibraryTileID = libraryTilesetData->WfcTileIDByUnrealID[matchTileID];
+				const auto& matchLibraryTile = libraryTilesetData->Tiles[matchLibraryTileID];
+				auto matchFacePoints = WFC::Tiled3D::GetFace(
+					matchLibraryTile.Data,
+					matchTilePermutation,
+					destFace
+				).Points;
+
+				if (facePoints == matchFacePoints)
+				{
+					//Position this tile along the face it matches with.
+					WFC::Vector3i offsetMultiple = WFC::Tiled3D::GetFaceDirection(srcFace) * matchI1;
+					FVector offsetMultipleF(offsetMultiple.x, offsetMultiple.y, offsetMultiple.z);
+					auto pos = (tileset->TileLength + spacingBetweenTiles) * offsetMultipleF;
+					
+					FTransform matchedTileTr = UKismetMathLibrary::ComposeTransforms(
+						FWFC_Transform3D{ matchTilePermutation }.ToFTransform(),
+						FTransform{ pos }
+					);
+					
+					//Flip the label to face the origin horizontally.
+					//By default it'll face +X.
+					float labelYaw;
+					switch (srcFace)
+					{
+						case WFC::Tiled3D::MinX:
+						case WFC::Tiled3D::MinZ:
+						case WFC::Tiled3D::MaxZ:
+							labelYaw = 0;
+						break;
+
+						case WFC::Tiled3D::MaxX:
+							labelYaw = 180;
+						break;
+						case WFC::Tiled3D::MinY:
+							labelYaw = 90;
+						break;
+						case WFC::Tiled3D::MaxY:
+							labelYaw = 270;
+						break;
+						
+						default: check(false); return;
+					}
+
+					auto labelTr = UKismetMathLibrary::ComposeTransforms(
+						FTransform{
+							FRotator{ 0, labelYaw, 0 },
+							pos
+						},
+						UKismetMathLibrary::ComposeTransforms(
+							FTransform{
+								FVector{ 0, 0, (tileset->TileLength / 2.0) + 50.0 } //Above the tile's center
+							},
+							rootTr
+						)
+					);
+
+					matches.Emplace(
+						matchTileID, matchTilePermutation,
+						static_cast<WFC_Directions3D>(srcFace),
+						FEditorSceneObject_WfcTile{
+							owner, viewportClient,
+							UKismetMathLibrary::ComposeTransforms(
+								matchedTileTr,
+								rootTr
+							),
+							boundsColor, tileset, matchTileID
+						},
+						FEditorTextComponent{
+							&owner,
+							labelTr,
+							FString::Printf(
+								TEXT("%i/%s\n%s"),
+								matchTileID,
+								*FWFC_Transform3D{ matchTilePermutation }.ToString(),
+								IsValid(matchTileData.Data) ?
+								    *matchTileData.Data->GetEditorDescription() :
+								    TEXT("[null]")
+							),
+							labelColor.ToFColorSRGB(),
+							EHTA_Center, EVRTA_TextBottom
+						}
+					);
+				
+					matchI1 += 1;
+				}
+			}
+		}
+		
+		//Add an informative label on top of the source tile's face.
+		WFC::Vector3i faceDir = WFC::Tiled3D::GetFaceDirection(srcFace);
+		auto faceLabelPos = FVector(faceDir.x, faceDir.y, faceDir.z) * ((tileset->TileLength / 2.0) - 20);
+		faceLabelPos.Z += 20 * (srcFace == WFC::Tiled3D::Directions3D::MinZ ? -1 : 1);
+		faceLabels.Emplace(
+			&owner,
+			UKismetMathLibrary::ComposeTransforms(
+				FTransform{ faceLabelPos },
+				rootTr
+			),
+			FString::Printf(TEXT("%i matches"), matchI1-1),
+			labelColor.ToFColorSRGB(),
+			EHTA_Center,
+			(srcFace == WFC::Tiled3D::Directions3D::MinZ ? EVRTA_TextTop : EVRTA_TextBottom)
+		);
+	}
 }
