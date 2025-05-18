@@ -1,6 +1,6 @@
 ﻿#include "WfcTilesetEditorViewport.h"
 
-#include "WfcTilesetEditorViewportClient.h"
+#include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
 #include "WfcTilesetEditorViewportToolBar.h"
 
 

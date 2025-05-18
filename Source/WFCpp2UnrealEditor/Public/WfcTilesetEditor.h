@@ -2,7 +2,6 @@
 
 #include "CoreMinimal.h"
 #include "Toolkits/AssetEditorToolkit.h"
-#include "Widgets/Views/STileView.h"
 
 #include "WfcTileset.h"
 
@@ -14,7 +13,8 @@ public:
 };
 
 
-extern const FName WfcTileset_TabID_Properties, WfcTileset_TabID_TileSelector;
+extern WFCPP2UNREALEDITOR_API const FName WfcTileset_TabID_Properties,
+										  WfcTileset_TabID_EditorSettings;
 
 //The top-level class representing our custom editor for a WFC tileset asset. 
 class WFCPP2UNREALEDITOR_API FWfcTilesetEditor : public IWfcTilesetEditor
@@ -44,11 +44,13 @@ public:
 
     //Meant to be usd by WfcTilesetEditorSceneViewTab:
     TSharedRef<SWidget> SpawnSceneView();
+
+	class FWfcTilesetEditorScene& GetScene() const;
     
 private:
 
 	TSharedRef<SDockTab> GeneratePropertiesTab(const FSpawnTabArgs& args);
-    TSharedRef<SDockTab> GenerateTileSelectorTab(const FSpawnTabArgs& args);
+    TSharedRef<SDockTab> GenerateEditorSettingsTab(const FSpawnTabArgs& args);
 
     void RefreshTileChoices();
     void OnTileSelected(TSharedPtr<FString> name, ESelectInfo::Type);
@@ -56,11 +58,14 @@ private:
     void OnTilesetEdited(const FPropertyChangedEvent&);
     void OnSceneTick(float deltaSeconds);
 
-    // ReSharper disable once CppUninitializedNonStaticDataMember
-    UWfcTileset* tileset;
+    UWfcTileset* tileset = nullptr;
     TOptional<WfcTileID> tileToVisualize;
     TArray<TSharedPtr<FString>> tilesetTileSelectorChoices;
     TArray<int> tilesetTileSelectorChoiceIDs;
+
+	//For a certain slate widget, we need a list of all editable directions.
+	TArray<FName> possibleFaceNamesToMatch;
+	TMap<FName, TTuple<WFC_Directions3D, FText>> faceNamesLookup;
 
 	TSharedPtr<SDockTab> propertiesTab, tileSelectorTab, tileSceneTab;
 	TSharedPtr<IDetailsView> detailsView;

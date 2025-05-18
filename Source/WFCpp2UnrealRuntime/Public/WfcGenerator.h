@@ -108,9 +108,5 @@ private:
 	WfcSimState status = WfcSimState::Off;
 	TOptional<WFC::Tiled3D::StandardRunner> state;
 
-	//Arrays used to build sim inputs on startup.
-	std::vector<WFC::Tiled3D::Tile> wfcTileInputs;
-    TArray<WfcTileID> wfcTileIDs;
-	TMap<WfcTileID, WFC::Tiled3D::TileIdx> wfcTileIDsByUnrealIDs;
-	TMap<WfcFacePrototypeID, WFC::Tiled3D::PointID> wfcFacePrototypeFirstIDs;
+	UWfcTileset::Unwrapped wfcLibraryData;
 };

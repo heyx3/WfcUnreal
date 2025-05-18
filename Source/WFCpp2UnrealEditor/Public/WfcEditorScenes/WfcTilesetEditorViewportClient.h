@@ -4,6 +4,7 @@
 
 #include "WfcTilesetEditorScene.h"
 
+
 //Based on this wonderful tutorial:
 //  https://easycomplex-tech.com/blog/Unreal/AssetEditor/UEAssetEditorDev-AssetEditorPreview/
 
@@ -14,7 +15,7 @@ class FWfcTilesetEditorViewportClient : public FEditorViewportClient
 public:
     FOnGameViewportTick OnTick;
     
-    FWfcTilesetEditorViewportClient(FWfcTilesetEditorScene& scene);
+    FWfcTilesetEditorViewportClient(class FWfcTilesetEditorScene& scene);
     
     virtual void Draw(FViewport* viewport, FCanvas* canvas) override;
     virtual void Tick(float deltaSeconds) override;

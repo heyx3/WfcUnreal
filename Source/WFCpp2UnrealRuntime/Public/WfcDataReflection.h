@@ -86,42 +86,68 @@ enum class WFC_Rotations3D : uint8
 	CornerBBA_240 = WFC::Tiled3D::Rotations3D::CornerBBA_240
 };
 
-
-//Provides a unique ID for each corner of a cube face.
-//These ID's describe both the symmetry of the face,
-//    and its ability to match up with another face.
-//The faces are ordered based on the two world-space axes along that face.
-// The first letter describes the first axis (X or Y),
-//     and the second describes the second axis (Y or Z).
-// An 'A' means the min side of that axis, while 'B' means the max side.
+//A unique identifier for a specific cube face, using identifiers organized in world space.
+//
+//For consistency the axes are always ordered X->Y->Z (e.g. on the Z face, axis 1 is X and axis 2 is Y).
+//
+//This face's symmetries are implicit in the use of duplicate identifiers;
+//    for example if all corners and faces have the same ID
+//    then all permutations of this face are equivalent.
 USTRUCT(BlueprintType)
-struct FWFC_Face
+struct WFCPP2UNREALRUNTIME_API FWFC_Face
 {
 	GENERATED_BODY()
-
 public:
-	//The corner on the 'min' side of both face axes.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int AA;
-	//The corner on the 'min' side of the first axis (X or Y),
-	//    and the 'max' side of the second axis (Y or Z).
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int AB;
-	
-	//The corner on the 'max' side of the first axis (X or Y),
-	//    and the 'min' side of the second axis (Y or Z).
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int BA;
-	//The corner on the 'max' side of both face axes.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	int BB;
 
+	//The corner on the 'min' side of both face axes.
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
+	int CornerAA = 0;
+	//The corner on the 'min' side of the first face axis (X or Y),
+	//    and the 'max' side of the second face axis (Y or Z).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin=0))
+	int CornerAB = 0;
+	//The corner on the 'max' side of the first face axis (X or Y),
+	//    and the 'min' side of the second face axis (Y or Z).
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin=0))
+	int CornerBA = 0;
+	//The corner on the 'max' side of both face axes.
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
+	int CornerBB = 0;
+
+	//The 'min' edge parallel to the first face axis (X or Y).
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
+	int EdgeAA = 0;
+	//The 'max' edge parallel to the first face axis (X or Y).
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
+	int EdgeAB = 0;
+	//The 'min' edge parallel to the second face axis (Y or Z).
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
+	int EdgeBA = 0;
+	//The 'max' edge parallel to the second face axis (Y or Z).
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(ClampMin=0))
+	int EdgeBB = 0;
+
+	WFC::Tiled3D::FaceIdentifiers Unwrap() const
+	{
+		WFC::Tiled3D::FaceIdentifiers fi;
+		fi.Corners[WFC::Tiled3D::AA] = CornerAA;
+		fi.Corners[WFC::Tiled3D::AB] = CornerAB;
+		fi.Corners[WFC::Tiled3D::BA] = CornerBA;
+		fi.Corners[WFC::Tiled3D::BB] = CornerBB;
+		fi.Edges[WFC::Tiled3D::AA] = EdgeAA;
+		fi.Edges[WFC::Tiled3D::AB] = EdgeAB;
+		fi.Edges[WFC::Tiled3D::BA] = EdgeBA;
+		fi.Edges[WFC::Tiled3D::BB] = EdgeBB;
+		return fi;
+	}
+	auto GetFields() const { return MakeTuple(CornerAA, CornerAB, CornerBA, CornerBB,
+											  EdgeAA, EdgeAB, EdgeBA, EdgeBB); }
 	bool operator==(const FWFC_Face& f) const
 	{
-		return AA == f.AA && AB == f.AB && BA == f.BA && BB == f.BB;
+		return GetFields() == f.GetFields();
 	}
 };
-inline uint32 GetTypeHash(const FWFC_Face& face) { return GetTypeHash(MakeTuple(face.AA, face.AB, face.BA, face.BB)); }
+inline uint32 GetTypeHash(const FWFC_Face& face) { return GetTypeHash(face.GetFields()); }
 template<>
 struct TStructOpsTypeTraits<FWFC_Face> : public TStructOpsTypeTraitsBase2<FWFC_Face>
 {
@@ -136,7 +162,7 @@ struct TStructOpsTypeTraits<FWFC_Face> : public TStructOpsTypeTraitsBase2<FWFC_F
 
 //Symmetry/face-matching data for all 6 faces of a tile.
 USTRUCT(BlueprintType)
-struct FWFC_Cube
+struct WFCPP2UNREALRUNTIME_API FWFC_Cube
 {
 	GENERATED_BODY()
 
@@ -179,7 +205,7 @@ inline uint32 GetTypeHash(const FWFC_Cube& cube) { return GetTypeHash(MakeTuple(
 //A transformation that can be done to a cube (while keeping it axis-aligned).
 //Defines hashing and equality.
 USTRUCT(BlueprintType)
-struct FWFC_Transform3D
+struct WFCPP2UNREALRUNTIME_API FWFC_Transform3D
 {
 	GENERATED_BODY()
 public:
@@ -195,12 +221,22 @@ public:
 		return Rot == t.Rot && Invert == t.Invert;
 	}
 
+    FWFC_Transform3D() = default;
     FWFC_Transform3D(WFC_Rotations3D rot, bool inverted) :  Rot(rot), Invert(inverted) { }
     FWFC_Transform3D(WFC_Rotations3D rot) : FWFC_Transform3D(rot, false) { }
-    FWFC_Transform3D() : FWFC_Transform3D(WFC_Rotations3D::None) { }
+	FWFC_Transform3D(const WFC::Tiled3D::Transform3D& tr) : Rot(static_cast<WFC_Rotations3D>(tr.Rot)), Invert(tr.Invert) { }
 
     WFC::Tiled3D::Transform3D Unwrap() const { return { Invert, static_cast<WFC::Tiled3D::Rotations3D>(Rot) }; }
     FTransform ToFTransform() const;
+	
+	FString ToString() const
+	{
+		return FString::Printf(
+			TEXT("%sRot%s"),
+			Invert ? TEXT("Invert->") : TEXT(""),
+			*UEnum::GetValueAsString(Rot).RightChop(13) //Remove the 'Rotations3D::'
+		);
+	}
 };
 inline uint32 GetTypeHash(const FWFC_Transform3D& t)
 {
@@ -213,6 +249,95 @@ struct TStructOpsTypeTraits<FWFC_Transform3D> : public TStructOpsTypeTraitsBase2
 	{
 		WithZeroConstructor = true,
 		WithNoDestructor = true,
+		WithIdenticalViaEquality = true
+	};
+};
+
+//An intuitive set of tile permutations that come from taking a set of initial permutations
+//    and applying groups of transforms to them.
+USTRUCT(BlueprintType)
+struct WFCPP2UNREALRUNTIME_API FWfcImplicitTransformSet
+{
+	GENERATED_BODY()
+public:
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	TSet<FWFC_Transform3D> InitialPermutations = { { } };
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool AllowInversions = false;
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool AllowAllRotations = false;
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations"))
+	bool AllowAxisRotations = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations"))
+	bool AllowCornerRotations = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations"))
+	bool AllowEdgeRotations = false;
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations && !AllowAxisRotations"))
+	bool AllowAxisXRotations = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations && !AllowAxisRotations"))
+	bool AllowAxisYRotations = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations && !AllowAxisRotations"))
+	bool AllowAxisZRotations = false;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations && !AllowEdgeRotations"))
+	bool AllowEdgeXRotations = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations && !AllowEdgeRotations"))
+	bool AllowEdgeYRotations = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditConditionHides, EditCondition="!AllowAllRotations && !AllowEdgeRotations"))
+	bool AllowEdgeZRotations = false;
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	TSet<FWFC_Transform3D> SpecificAllowedTransforms = { };
+	
+
+	WFC::Tiled3D::ImplicitTransformSet Unwrap() const
+	{
+		WFC::Tiled3D::ImplicitTransformSet set;
+		
+		set.InitialTransforms.Clear();
+		for (const auto& tr : InitialPermutations)
+			set.InitialTransforms.Add(tr.Unwrap());
+
+		set.AllowInversion = AllowInversions;
+		set.AllowAllRotations =  AllowAllRotations;
+
+		set.AllowAxisRots = AllowAxisRotations;
+		set.AllowCornerRots = AllowCornerRotations;
+		set.AllowEdgeRots = AllowEdgeRotations;
+
+		set.AllowAxisXRots = AllowAxisXRotations;
+		set.AllowAxisYRots = AllowAxisYRotations;
+		set.AllowAxisZRots = AllowAxisZRotations;
+
+		set.AllowEdgeXRots = AllowEdgeXRotations;
+		set.AllowEdgeYRots = AllowEdgeYRotations;
+		set.AllowEdgeZRots = AllowEdgeZRotations;
+
+		for (const auto& tr : SpecificAllowedTransforms)
+			set.SpecificAllowedTransforms.Add(tr.Unwrap());
+
+		return set;
+	}
+
+	bool operator==(const FWfcImplicitTransformSet& s2) const
+	{
+		return Unwrap().GetExplicit() == s2.Unwrap().GetExplicit();
+	}
+};
+inline uint32_t GetTypeHash(const FWfcImplicitTransformSet& set)
+{
+	return static_cast<uint32_t>(set.Unwrap().GetExplicit().Bits());
+}
+template<>
+struct TStructOpsTypeTraits<FWfcImplicitTransformSet> : public TStructOpsTypeTraitsBase2<FWfcImplicitTransformSet>
+{
+	enum
+	{
 		WithIdenticalViaEquality = true
 	};
 };

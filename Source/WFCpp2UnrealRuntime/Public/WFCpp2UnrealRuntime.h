@@ -11,4 +11,4 @@ public:
     virtual void ShutdownModule() override;
 };
 
-DECLARE_LOG_CATEGORY_EXTERN(LogWFCpp, Warning, Log);
+WFCPP2UNREALRUNTIME_API DECLARE_LOG_CATEGORY_EXTERN(LogWFCpp, Warning, Log);

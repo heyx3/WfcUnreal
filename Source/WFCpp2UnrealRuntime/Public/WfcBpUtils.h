@@ -9,7 +9,7 @@
 #include "WfcBpUtils.generated.h"
 
 UCLASS()
-class WFCPP2UNREALRUNTIME_API UBP_Utils : public UBlueprintFunctionLibrary
+class WFCPP2UNREALRUNTIME_API UWfcUtils : public UBlueprintFunctionLibrary
 {
 	GENERATED_BODY()
 public:
@@ -32,9 +32,17 @@ public:
     UFUNCTION(BlueprintCallable, Category="Faces")
     static const FWfcTileFace& GetFace(const FWfcTile& tile, WFC_Directions3D dir) { return tile.GetFace(static_cast<WFC::Tiled3D::Directions3D>(dir)); }
 
-    UFUNCTION(BlueprintCallable, BlueprintPure, meta=(CompactNodeTitle="FTransform"))
-    static FTransform ToFTransform(const FWFC_Transform3D& wfcTransform) { return wfcTransform.ToFTransform(); }
-    
+    UFUNCTION(BlueprintCallable, BlueprintPure, meta=(CompactNodeTitle="Transform"))
+    static FTransform WfcToFTransform(const FWFC_Transform3D& wfcTransform) { return wfcTransform.ToFTransform(); }
+    UFUNCTION(BlueprintCallable, BlueprintPure, meta=(CompactNodeTitle="Rotator"))
+	static FRotator WfcToFRotator(WFC_Directions3D face);
+
+	//Can also be used for rotations (just make a transform with no inversion).
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	static FWFC_Transform3D CombineWfcTransforms(const FWFC_Transform3D& first, const FWFC_Transform3D& second)
+	{
+		return { first.Unwrap().Then(second.Unwrap()) };
+	}
 
 	//The special face prototype ID that represents 'null'.
 	UFUNCTION(BlueprintCallable, BlueprintPure, meta=(CompactNodeTitle="NULL face ID"))

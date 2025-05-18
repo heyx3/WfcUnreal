@@ -1,6 +1,7 @@
-﻿#include "WfcTilesetEditorViewportClient.h"
+﻿#include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
 
 #include "WFCpp2UnrealEditor.h"
+
 
 FWfcTilesetEditorViewportClient::FWfcTilesetEditorViewportClient(FWfcTilesetEditorScene& scene)
     //NOTE: the 'nullptr' in the base constructor is a "FEditorModeTools", which I believe represents
@@ -14,7 +15,7 @@ FWfcTilesetEditorViewportClient::FWfcTilesetEditorViewportClient(FWfcTilesetEdit
     // DrawHelper.bDrawGrid = false;
     // DrawHelper.GridColorAxis = FColor(80,80,80);
     // DrawHelper.GridColorMajor = FColor(72,72,72);
-    // DrawHelper.GridColorMinor = FColor(64,64,64);
+    // DrawHelper.GridColorMinor = FColor(64,64,64);	
     // DrawHelper.PerspectiveGridSize = HALF_WORLD_MAX1;
 
     //Note: some initialization can't be done here, such as centering the camera viewport.
@@ -37,8 +38,7 @@ void FWfcTilesetEditorViewportClient::Tick(float deltaSeconds)
         FocusViewportOnBox(FBox(FVector::OneVector * -500, FVector::OneVector * 500),
                            true);
     }
-    
-
+	
     OnTick.Broadcast(deltaSeconds);
 }
 void FWfcTilesetEditorViewportClient::Draw(FViewport* viewport, FCanvas* canvas)

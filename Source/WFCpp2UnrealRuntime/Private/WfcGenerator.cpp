@@ -57,7 +57,7 @@ bool UWfcGenerator::GetCell(const FIntVector& cellPos,
 	const auto& cell = wfc.Grid.Cells[wfcPos];
 	if (cell.IsSet())
 	{
-	    out_tileID = wfcTileIDs[cell.ChosenTile];
+	    out_tileID = wfcLibraryData.WfcTileIDs[cell.ChosenTile];
 	    out_tileData = tileset->Tiles[out_tileID].Data;
 	    out_tileTransform = { static_cast<WFC_Rotations3D>(cell.ChosenPermutation.Rot),
 	                          cell.ChosenPermutation.Invert };
@@ -83,7 +83,7 @@ void UWfcGenerator::SetCell(const FIntVector& cell, int32 unrealTileID, FWFC_Tra
 		UE_LOG(LogWFCpp, Error, TEXT("Cell index is out of range: %i,%i,%i"), cell.X, cell.Y, cell.Z);
 		return;
 	}
-	auto wfcTileID = wfcTileIDsByUnrealIDs[unrealTileID];
+	auto wfcTileID = wfcLibraryData.WfcTileIDByUnrealID[unrealTileID];
 	
 	state->SetCell({ cell.X, cell.Y, cell.Z }, wfcTileID,
 				   permutation.Unwrap(), persistent);
@@ -111,7 +111,7 @@ void UWfcGenerator::SetFace(const FIntVector& cell, WFC_Directions3D face,
 	auto points = tileset->FacePrototypes[facePrototypeId];
 	state->SetFaceConstraint(
 		{ cell.X, cell.Y, cell.Z }, static_cast<WFC::Tiled3D::Directions3D>(face),
-		points.Unwrap(wfcFacePrototypeFirstIDs[facePrototypeId])
+		points.Unwrap(wfcLibraryData.WfcFacePrototypeFirstIDs[facePrototypeId])
 	);
 }
 
@@ -157,71 +157,16 @@ void UWfcGenerator::Start(const UWfcTileset* tiles,
 		Cancel();
 
     tileset = tiles;
-
-	if (tileset == nullptr || tileset->Tiles.Num() == 0)
+	if (!IsValid(tileset) || tileset->Tiles.Num() == 0)
 	{
 		UE_LOG(LogWFCpp, Error, TEXT("Given a null or empty tileset to generate from! Generator will immediately exit"));
 		return;
 	}
-
-    //TODO: Allocate reusable buffers for the input data setup, below.
-    
-    //Assign unique point ID's based on the face prototypes.
-    //Each face prototype can have up to 4 values.
-    WFC::Tiled3D::PointID nextPointID = 1;
-    for (const auto& facePrototype : tiles->FacePrototypes)
-    {
-        wfcFacePrototypeFirstIDs.Add(facePrototype.Get<0>(), nextPointID);
-        nextPointID += 4;
-    }
-
-    //Convert each serialized Unreal tile into a WFC library tile.
-    wfcTileInputs.clear();
-    wfcTileIDs.Empty();
-	wfcTileIDsByUnrealIDs.Empty();
-    TSet<FWFC_Transform3D> buffer_supportedTransforms;
-    for (const auto& tile : tiles->Tiles)
-    {
-        wfcTileIDs.Add(tile.Key);
-    	wfcTileIDsByUnrealIDs.Add(tile.Key, wfcTileIDs.Num() - 1);
-        wfcTileInputs.push_back({ });
-        
-    	auto& wfcTile = wfcTileInputs.back();
-        wfcTile.Weight = static_cast<uint32_t>(tile.Value.WeightU32);
-
-        //Convert the serialized UE4 permutation set into a WFC library permutation set.
-        buffer_supportedTransforms.Empty();
-        tile.Value.GetSupportedTransforms(buffer_supportedTransforms);
-        for (auto transform : buffer_supportedTransforms)
-            wfcTile.Permutations.Add(transform.Unwrap());
-
-        //Convert the serialized UE4 face data into WFC library face data.
-        for (int faceI = 0; faceI < WFC::Tiled3D::N_DIRECTIONS_3D; ++faceI)
-        {
-            auto dir = static_cast<WFC::Tiled3D::Directions3D>(faceI);
-            wfcTile.Data.Faces[faceI].Side = dir;
-
-            //Generate the point ID's for this face.
-            const auto& assetFace = tile.Value.GetFace(dir);
-            const auto& prototype = tiles->FacePrototypes[assetFace.PrototypeID];
-            auto firstFaceID = wfcFacePrototypeFirstIDs[assetFace.PrototypeID];
-            for (int pointI = 0; pointI < WFC::Tiled3D::N_FACE_POINTS; ++pointI)
-            {
-                auto localCorner = static_cast<WFC::Tiled3D::FacePoints>(pointI);
-                auto prototypeCorner = assetFace.GetPrototypeCorner(localCorner);
-                auto cornerID = prototype.GetPointSymmetry(prototypeCorner);
-
-                //Convert the 0-3 symmetry value stored in the asset,
-                //    into a unique index across all tile faces.
-                auto cornerUniqueID = firstFaceID + static_cast<WFC::Tiled3D::PointID>(cornerID);
-                wfcTile.Data.Faces[faceI].Points[pointI] = cornerUniqueID;
-            }
-        }
-    }
+	tileset->Unwrap(wfcLibraryData);
 
 	//Start the algorithm.
 	state.Emplace(
-	    wfcTileInputs, WFC::Vector3i(gridSize.X, gridSize.Y, gridSize.Z),
+	    wfcLibraryData.Tiles, WFC::Vector3i(gridSize.X, gridSize.Y, gridSize.Z),
 	    nullptr,
 	    WFC::PRNG(seed)
 	);
