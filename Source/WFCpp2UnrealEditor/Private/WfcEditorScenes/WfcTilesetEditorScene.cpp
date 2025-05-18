@@ -52,7 +52,8 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 			*newTileData != *currentTile || *tile != *currentTileID ||
 			!currentTileset->FacePrototypes.OrderIndependentCompareEqual(tileset->FacePrototypes) ||
 			(viewMode.IsType<FEditorSceneObject_WfcTileWithMatches>() &&
-				!SetsAreEqual(currentFacesToMatch, FacesToMatchAgainst))
+				!SetsAreEqual(currentFacesToMatch, FacesToMatchAgainst)) ||
+			currentPermutationToMatch != PermutationToMatchAgainst
 		))
 	{
 		check(newTileData.IsSet());
@@ -60,6 +61,7 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 		currentTileID = *tile;
 		currentTile = *newTileData;
 		currentFacesToMatch = FacesToMatchAgainst;
+		currentPermutationToMatch = PermutationToMatchAgainst;
 
 		switch (Mode)
 		{
@@ -67,7 +69,7 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 				viewMode.Emplace<FEditorSceneObject_WfcTile>(
 					*this, *owner,
 					FTransform{ }, FLinearColor{ 0, 0, 0, 1 },
-					tileset, *tile
+					tileset, *tile, currentPermutationToMatch
 				);
 			break;
 			case EWfcTilesetEditorMode::Permutations:
@@ -84,7 +86,7 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 					FTransform{ }, SpacingBetweenTiles,
 					FLinearColor{ 0, 0, 0, 1 }, FLinearColor{ 0, 0, 0, 1 },
 					tileset, *tile,
-					PermutationToMatchAgainst, FacesToMatchAgainst
+					currentPermutationToMatch, currentFacesToMatch
 				);
 			break;
 			

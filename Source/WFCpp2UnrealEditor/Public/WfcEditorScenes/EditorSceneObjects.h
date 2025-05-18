@@ -79,9 +79,9 @@ struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcTile : public FEditorSceneOb
 public:
 
 	FEditorSceneObject_WfcTile(FWfcTilesetEditorScene& owner, class FWfcTilesetEditorViewportClient& viewportClient,
-							   const FTransform& tr,
+							   const FTransform& worldTr,
 							   const FLinearColor& boundsColor,
-							   const class UWfcTileset* tileset, int32 tileID,
+							   const class UWfcTileset* tileset, int32 tileID, const FWFC_Transform3D& permutation,
 							   bool includeVisualizer = true);
 
 	FTransform GetCurrentTransform() const { return currentTr; }

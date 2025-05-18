@@ -265,6 +265,7 @@ FEditorSceneObject_WfcTile::FEditorSceneObject_WfcTile(FWfcTilesetEditorScene& o
 													   const FTransform& tr,
 													   const FLinearColor& boundsColor,
 													   const UWfcTileset* tileset, int32 tileID,
+													   const FWFC_Transform3D& permutation,
 													   bool includeVisualizer)
     : FEditorSceneObject(&owner),
       tileBounds(Owner,
@@ -296,7 +297,8 @@ FEditorSceneObject_WfcTile::FEditorSceneObject_WfcTile(FWfcTilesetEditorScene& o
 	if (includeVisualizer)
 		tileDataVisualizer = WfcTileVisualizer::MakeVisualizer({
 			owner, viewportClient,
-			{ tileset }, tileID, tileset->Tiles[tileID], tr
+			{ tileset }, tileID, permutation,
+			tileset->Tiles[tileID], tr
 		});
 }
 void FEditorSceneObject_WfcTile::SetTransform(const FTransform& newTr)
@@ -402,7 +404,7 @@ FEditorSceneObject_WfcTileWithPermutations::FEditorSceneObject_WfcTileWithPermut
 		permutations.Emplace(
 			FEditorSceneObject_WfcTile{
 				owner, viewportClient, worldTr,
-				boundsColor, tileset, tileID, visualizeTileData
+				boundsColor, tileset, tileID, wfcTr, visualizeTileData
 			},
 			FEditorTextComponent{
 				Owner, labelTr, labelStr, labelColor.ToFColorSRGB(),
@@ -455,7 +457,8 @@ FEditorSceneObject_WfcTileWithMatches::FEditorSceneObject_WfcTileWithMatches(
 				       		permutation.ToFTransform()
 				       ),
 				       boundsColor,
-					   tileset, tileID, visualizeTileData);
+					   tileset, tileID, permutation,
+					   visualizeTileData);
 
 	for (auto _srcFace : facesToMatchAfterPermutation)
 	{
@@ -536,7 +539,7 @@ FEditorSceneObject_WfcTileWithMatches::FEditorSceneObject_WfcTileWithMatches(
 								matchedTileTr,
 								rootTr
 							),
-							boundsColor, tileset, matchTileID
+							boundsColor, tileset, matchTileID, matchTilePermutation
 						},
 						FEditorTextComponent{
 							&owner,

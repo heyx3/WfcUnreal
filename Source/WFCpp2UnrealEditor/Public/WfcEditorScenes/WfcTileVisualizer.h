@@ -14,9 +14,11 @@ struct FWfcTileVisualizerInputs
 	const TWeakObjectPtr<const UWfcTileset> Tileset;
 
 	const int32 TileIdx;
+	const FWFC_Transform3D Permutation;
 	const TOptional<FWfcTile> Tile;
 	const UWfcTileGameData* GetTileGameData() const { return (Tile.IsSet() ? Tile->Data : nullptr); }
 
+	//This transform is assumed to already incorporate the permutation (`Permutation.ToFTransform()`).
 	FTransform TileTr;
 };
 

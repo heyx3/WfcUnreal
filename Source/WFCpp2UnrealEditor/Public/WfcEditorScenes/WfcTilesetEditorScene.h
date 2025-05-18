@@ -65,4 +65,5 @@ private:
 	TOptional<int> currentTileID;
 	TOptional<EWfcTilesetEditorMode> currentViewMode;
 	TSet<WFC_Directions3D> currentFacesToMatch;
+	FWFC_Transform3D currentPermutationToMatch;
 };
