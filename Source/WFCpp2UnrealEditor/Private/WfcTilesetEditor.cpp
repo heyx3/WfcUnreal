@@ -15,6 +15,7 @@
 #include "Widgets/Layout/SScrollBox.h"
 #include "SAssetDropTarget.h"
 #include "EditorStyleSet.h"
+#include "IStructureDetailsView.h"
 #include "SEnumCombo.h"
 
 #include "WFCpp2UnrealEditor.h"
@@ -110,43 +111,73 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 {
 	check(args.GetTabId() == WfcTileset_TabID_EditorSettings);
 
+	//Lambdas for controlling the UI:
 	auto showIfMatchingFn = [&]() {
 		switch (GetScene().Mode)
 		{
-		case EWfcTilesetEditorMode::Tile:
-		case EWfcTilesetEditorMode::Permutations:
-			return EVisibility::Collapsed;
-		case EWfcTilesetEditorMode::Matches:
-			return EVisibility::Visible;
-								
-		default:
-			check(false);
-			return EVisibility::Hidden;
+			case EWfcTilesetEditorMode::Tile:
+			case EWfcTilesetEditorMode::Permutations:
+				return EVisibility::Collapsed;
+			case EWfcTilesetEditorMode::Matches:
+				return EVisibility::Visible;
+									
+			default:
+				check(false);
+				return EVisibility::Hidden;
 		}
 	};
-	possibleFaceNamesToMatch.Empty();
-	possibleFaceNamesToMatch.Add(TEXT("WfcDir3D_MinX"));
-		faceNamesLookup.Add(possibleFaceNamesToMatch.Last(),
-						    (MakeTuple(WFC_Directions3D::MinX, FText::FromString(TEXT("MinX")))));
-	possibleFaceNamesToMatch.Add(TEXT("WfcDir3D_MinY"));
-		faceNamesLookup.Add(possibleFaceNamesToMatch.Last(),
-						    (MakeTuple(WFC_Directions3D::MinY, FText::FromString(TEXT("MinY")))));
-	possibleFaceNamesToMatch.Add(TEXT("WfcDir3D_MinZ"));
-		faceNamesLookup.Add(possibleFaceNamesToMatch.Last(),
-							(MakeTuple(WFC_Directions3D::MinZ, FText::FromString(TEXT("MinZ")))));
-	possibleFaceNamesToMatch.Add(TEXT("WfcDir3D_MaxX"));
-		faceNamesLookup.Add(possibleFaceNamesToMatch.Last(),
-					        (MakeTuple(WFC_Directions3D::MaxX, FText::FromString(TEXT("MaxX")))));
-	possibleFaceNamesToMatch.Add(TEXT("WfcDir3D_MaxY"));
-		faceNamesLookup.Add(possibleFaceNamesToMatch.Last(),
-						    (MakeTuple(WFC_Directions3D::MaxY, FText::FromString(TEXT("MaxY")))));
-	possibleFaceNamesToMatch.Add(TEXT("WfcDir3D_MaxZ"));
-		faceNamesLookup.Add(possibleFaceNamesToMatch.Last(),
-							(MakeTuple(WFC_Directions3D::MaxZ, FText::FromString(TEXT("MaxZ")))));
+	auto faceMatcherToggleWidget = [&](WFC_Directions3D face)
+	{
+		auto* scene = &GetScene();
+		auto label = FText::FromString(UEnum::GetValueAsString(face).RightChop(18));
+		return SNew(SHorizontalBox)
+	      + SHorizontalBox::Slot().VAlign(EVerticalAlignment::VAlign_Center).AutoWidth() [
+		      SNew(STextBlock).Text(label)
+	      ]
+		  + SHorizontalBox::Slot().MinWidth(5).MaxWidth(5) [ SNullWidget::NullWidget ]
+	      + SHorizontalBox::Slot().VAlign(EVerticalAlignment::VAlign_Center).AutoWidth() [
+		      SNew(SCheckBox)
+		        .IsChecked_Lambda([face, scene]() {
+			        return scene->FacesToMatchAgainst.Contains(face) ?
+		                ECheckBoxState::Checked :
+		                ECheckBoxState::Unchecked;
+		        })
+		        .OnCheckStateChanged_Lambda([face, scene](ECheckBoxState newState) {
+		        	if (newState == ECheckBoxState::Checked)
+						scene->FacesToMatchAgainst.Add(face);
+			        else if (newState == ECheckBoxState::Unchecked)
+			        	scene->FacesToMatchAgainst.Remove(face);
+		        })
+		  ];
+	};
 
-	//Pointers for lambdas to caapture:
+	//Pointers for lambdas to capture:
 	auto* scenePtr = &GetScene();
-	auto* faceNamesLookupPtr = &faceNamesLookup;
+
+	//Set up a property editor for the permutation to match tiles against.
+	auto& propertyEditorModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
+	FDetailsViewArgs matchingPermutationEditorArgs;
+	matchingPermutationEditorArgs.bAllowSearch = false;
+	matchingPermutationEditorArgs.bHideSelectionTip = true;
+	matchingPermutationEditorArgs.bSearchInitialKeyFocus = true;
+	matchingPermutationEditorArgs.bShowOptions = true;
+	matchingPermutationEditorArgs.bLockable = false;
+	matchingPermutationEditorArgs.bUpdatesFromSelection = false;
+	matchingPermutationEditorArgs.bShowScrollBar = false;
+	matchingPermutationEditorArgs.bShowModifiedPropertiesOption = false;
+	FStructureDetailsViewArgs matchingPermutationEditorStructArgs;
+	matchingPermutationEditorStructArgs.bShowObjects = true;
+	matchingPermutationEditorStructArgs.bShowAssets = true;
+	matchingPermutationEditorStructArgs.bShowClasses = true;
+	matchingPermutationEditorStructArgs.bShowInterfaces = true;
+	editorForPermutationToMatch = propertyEditorModule.CreateStructureDetailView(
+		matchingPermutationEditorArgs, matchingPermutationEditorStructArgs, nullptr
+	);
+	auto* scopedMatchingPermutationStruct = new FStructOnScope(
+		FWFC_Transform3D::StaticStruct(),
+		reinterpret_cast<uint8_t*>(&GetScene().PermutationToMatchAgainst)
+	);
+	editorForPermutationToMatch->SetStructureData(MakeShareable(scopedMatchingPermutationStruct));
 	
 	return SAssignNew(tileSelectorTab, SDockTab)
 			.Icon(FEditorStyle::GetBrush("GenericEditor.Tabs.Properties"))
@@ -223,39 +254,26 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 					//Tab in:
 					SNew(SHorizontalBox)
 					   .Visibility_Lambda(showIfMatchingFn)
-					+ SHorizontalBox::Slot()[ SNew(SSpacer).Size(FVector2D{ 20, 1 }) ]
+					+ SHorizontalBox::Slot()
+					    .MinWidth(20).MaxWidth(20)
+					    [ SNew(SSpacer).Size(FVector2D{ 1, 1 }) ]
 					//Display a grid of checkboxes for each face:
 					+ SHorizontalBox::Slot() [
-						SNew(STileView<FName>)
-						  .ListItemsSource(&possibleFaceNamesToMatch)
-						  .OnGenerateTile_Lambda([scenePtr, faceNamesLookupPtr](FName dirName, const TSharedRef<STableViewBase>& owner) {
-						  	  const auto& [dir, label] = (*faceNamesLookupPtr)[dirName];
-						      return SNew(STableRow<TSharedPtr<SWidget>>, owner)
-						      	      .Padding(FMargin{ 10.0f, 5.0f })
-						      [
-							      SNew(SHorizontalBox)
-						      	  + SHorizontalBox::Slot() [ SNew(STextBlock).Text(label) ]
-							      + SHorizontalBox::Slot() [
-								      SNew(SCheckBox)
-								        .IsChecked_Lambda([scenePtr, dir]() {
-									        return scenePtr->FacesToMatchAgainst.Contains(dir) ?
-									        	ECheckBoxState::Checked :
-								        		ECheckBoxState::Unchecked;
-								        })
-										.OnCheckStateChanged_Lambda([scenePtr, dir](ECheckBoxState newState) {
-											if (newState == ECheckBoxState::Checked)
-												scenePtr->FacesToMatchAgainst.Add(dir);
-											else if (newState == ECheckBoxState::Unchecked)
-												scenePtr->FacesToMatchAgainst.Remove(dir);
-										})
-							      ]
-							  ];
-						  })
-						  .Orientation(Orient_Horizontal)
-						  .SelectionMode(ESelectionMode::None)
+						SNew(SGridPanel)
+						  + SGridPanel::Slot(0, 0).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MinX) ]
+						  + SGridPanel::Slot(1, 0).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MinY) ]
+						  + SGridPanel::Slot(2, 0).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MinZ) ]
+						  + SGridPanel::Slot(0, 1).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MaxX) ]
+						  + SGridPanel::Slot(1, 1).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MaxY) ]
+						  + SGridPanel::Slot(2, 1).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MaxZ) ]
 					]
 				]
-				//TODO: widget for the permutation to use for matching
+				+ SScrollBox::Slot()
+				[
+					SNew(SHorizontalBox)
+					    .Visibility_Lambda(showIfMatchingFn)
+					+ SHorizontalBox::Slot() [ editorForPermutationToMatch->GetWidget()->AsShared() ]
+				]
 			];
 }
 

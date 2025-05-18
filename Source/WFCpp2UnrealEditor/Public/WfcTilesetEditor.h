@@ -63,13 +63,10 @@ private:
     TArray<TSharedPtr<FString>> tilesetTileSelectorChoices;
     TArray<int> tilesetTileSelectorChoiceIDs;
 
-	//For a certain slate widget, we need a list of all editable directions.
-	TArray<FName> possibleFaceNamesToMatch;
-	TMap<FName, TTuple<WFC_Directions3D, FText>> faceNamesLookup;
-
 	TSharedPtr<SDockTab> propertiesTab, tileSelectorTab, tileSceneTab;
 	TSharedPtr<IDetailsView> detailsView;
     TSharedPtr<STextComboBox> tileSelector;
+	TSharedPtr<IStructureDetailsView> editorForPermutationToMatch;
     
     TSharedPtr<struct FWfcTilesetEditorSceneViewTab> tileSceneTabFactory;
     TSharedPtr<class SWfcTilesetTabBody> tileSceneTabBody;
