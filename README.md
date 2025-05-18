@@ -1,5 +1,9 @@
 # WFC Unreal
 
+[![A fast overview of this plugin](https://img.youtube.com/vi/EW7SBTsfiDo/0.jpg)](https://www.youtube.com/watch?v=EW7SBTsfiDo)
+
+###### (a Youtube video overview of the plugin)
+
 An extension to my [WFCpp library](https://github.com/heyx3/WFCpp) to integrate its `Tiled3D` module with Unreal Engine 5.
 This allows you to quickly generate a grid of tiles from some 3D tileset,
     including automatic rotations and inversions of your tiles with partly-automated detection of symmetries.
