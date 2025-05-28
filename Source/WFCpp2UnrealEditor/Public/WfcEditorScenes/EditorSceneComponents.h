@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "WFCpp2UnrealEditor.h"
 #include "Components/TextRenderComponent.h"
 #include "GameFramework/WorldSettings.h"
 
@@ -29,6 +30,14 @@ public:
 
 	operator UActorComponent*() { return componentUntyped.Get(); }
 	operator const UActorComponent*() const { return componentUntyped.Get(); }
+
+	template<typename... Transforms>
+	void SetWorldTransformFromSequence(const Transforms&... transforms)
+	{
+		CastChecked<USceneComponent>(componentUntyped)->SetWorldTransform(
+			WfcppUnrealEditor::ComposeTransforms(transforms...)
+		);
+	}
 
 protected:
 

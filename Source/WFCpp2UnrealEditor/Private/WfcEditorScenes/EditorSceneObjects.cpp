@@ -45,6 +45,10 @@ FEditorSceneObject_WfcFace::FEditorSceneObject_WfcFace(FPreviewScene* owner,
 {
 	centerSphere.Emplace(Owner, FTransform{ }, FColor{ 1, 1, 1 });
 	facePlane.Emplace(Owner, FTransform{ }, LoadFaceEditorMaterial(faceSide));
+
+	//If the face is empty, then display its name at its center.
+	if (facePrototype.IsEmpty())
+		fallbackLabel.Emplace(Owner, FTransform{ }, facePrototype.Nickname, FColor{ 1, 1, 1 });
 	
 	//Generate components for the face corners.
 	auto doCorner = [&](WFC::Tiled3D::FacePoints pointLocationTile)
@@ -104,75 +108,113 @@ FEditorSceneObject_WfcFace::FEditorSceneObject_WfcFace(FPreviewScene* owner,
 }
 void FEditorSceneObject_WfcFace::RebuildTransform()
 {
-	FTransform faceTr;
-	std::array<FTransform, 4> cornerTrs, edgeTrs;
-
 	auto unwrappedFace = static_cast<WFC::Tiled3D::Directions3D>(faceSide);
 	uint_fast8_t faceIdx, faceAxis1, faceAxis2;
 	WFC::Tiled3D::GetAxes(unwrappedFace, faceIdx, faceAxis1, faceAxis2);
+	int faceSign = WFC::Tiled3D::IsMin(unwrappedFace) ? -1 : 1;
 
-	FVector faceOffset{ 0, 0, 0 };
-	faceOffset[faceIdx] = WFC::Tiled3D::IsMin(unwrappedFace) ? -cubeExtents : cubeExtents;
-	faceOffset = tileTr.TransformVector(faceOffset);
-	faceTr = {
-		UKismetMathLibrary::ComposeRotators(
-			UKismetMathLibrary::ComposeRotators(
-				FRotator{ 0, 180, 0 },
-				UWfcUtils::WfcToFRotator(faceSide)
-			),
-			tileTr.Rotator()
-		),
-		tileTr.GetLocation() + faceOffset,
-		tileTr.GetScale3D()
+	//Compute this face's rotation.
+	FVector faceOutward = FVector::ZeroVector,
+			faceTangent1 = FVector::ZeroVector,
+		    faceTangent2 = FVector::ZeroVector;
+	faceOutward[faceIdx] = faceSign;
+	faceTangent1[faceAxis1] = 1;
+	faceTangent2[faceAxis2] = 1;
+	auto faceLocalRot = UKismetMathLibrary::MakeRotFromXZ(faceOutward, faceTangent2);
+
+	//Compute this face's center.
+	FVector faceLocalCenter{ 0, 0, 0 };
+	faceLocalCenter[faceIdx] = faceSign * cubeExtents;
+
+	//Compute a transform for the face's center, looking outward.
+	FTransform faceCenterLocalTr{
+		UKismetMathLibrary::MakeRotFromXZ(faceOutward, faceTangent2),
+		faceLocalCenter
 	};
+
+	//Some transform data should grow with the tile size.
+	double arrowThickness = FMath::Lerp(2.5, 10.0, FMath::GetRangePct(100.0, 1000.0, cubeExtents)),
+		   labelScale = FMath::Lerp(0.25, 1.0, FMath::GetRangePct(100.0, 1000.0, cubeExtents)),
+		   sphereSize = FMath::Lerp(5.0, 25.0, FMath::GetRangePct(100.0, 1000.0, cubeExtents)),
+		   edgeLabelOffset = FMath::Pow(cubeExtents / 10, 0.5);
+	
 	if (centerSphere.IsSet())
-		centerSphere->GetComponent()->SetWorldTransform(FTransform{ faceTr.Rotator(), faceTr.GetLocation(), FVector{ 10 }});
+		centerSphere->SetWorldTransformFromSequence(
+			FTransform{ FQuat::Identity, FVector::ZeroVector, FVector{ sphereSize } },
+			faceCenterLocalTr,
+			tileTr
+		);
+	
 	if (facePlane.IsSet())
-		facePlane->GetComponent()->SetWorldTransform(FEditorPlaneComponent::GetTransform(
-			faceTr.GetLocation(),
-			FVector2D{ cubeExtents },
-			faceTr.Rotator().Vector()
-		));
+		facePlane->SetWorldTransformFromSequence(
+			FEditorPlaneComponent::GetTransform(
+				faceCenterLocalTr.GetLocation(),
+				FVector2D{ cubeExtents },
+				faceCenterLocalTr.GetRotation().GetForwardVector()
+			),
+			tileTr
+		);
+
+	if (fallbackLabel.IsSet())
+		fallbackLabel->SetWorldTransformFromSequence(
+			FTransform{
+				FQuat::Identity,
+				FVector{ cubeExtents * 0.1, 0, 0 },
+				FVector::OneVector * labelScale
+			},
+			faceCenterLocalTr,
+			tileTr
+		);
 
 	//Calculate Corner transforms.
 	for (int faceAxis1Dir = 0; faceAxis1Dir < 2; ++faceAxis1Dir)
 		for (int faceAxis2Dir = 0; faceAxis2Dir < 2; ++faceAxis2Dir)
 		{
 			auto facePointTile = WFC::Tiled3D::MakeCornerFacePoint(faceAxis1Dir == 0, faceAxis2Dir == 0);
-			
-			FVector cornerOffset{ 0, 0, 0 };
-			cornerOffset[faceAxis1] = (faceAxis1Dir == 0) ? -cubeExtents : cubeExtents;
-			cornerOffset[faceAxis2] = (faceAxis2Dir == 0) ? -cubeExtents : cubeExtents;
-			cornerOffset = tileTr.TransformVector(cornerOffset);
 
-			cornerTrs[facePointTile] = {
-				faceTr.Rotator(),
-				faceTr.GetLocation() + cornerOffset,
-				faceTr.GetScale3D()
-			};
+			//Corner offsets must be in tile-local space, not face space,
+			//    otherwise they are affected by the face's rotation
+			//    causing details on opposite faces to not line up.
+			FVector tileLocalCornerOffset;
+			tileLocalCornerOffset[faceIdx] = cubeExtents * faceSign;
+			tileLocalCornerOffset[faceAxis1] = cubeExtents * (faceAxis1Dir == 0 ? -1 : 1);
+			tileLocalCornerOffset[faceAxis2] = cubeExtents * (faceAxis2Dir == 0 ? -1 : 1);
+			FVector tileLocalCornerDir = tileLocalCornerOffset.GetUnsafeNormal();
+
 			if (cornerLabels[facePointTile].IsSet())
 			{
 				//Give each face a different vertical offset so the labels don't intersect each other.
-				float verticalOffset = std::to_array({-40, 0, 40})[faceIdx];
+				double verticalOffset = cubeExtents * 0.15 * std::to_array({-1, 1, 0})[faceIdx];
+
+				FVector tileLocalLabelOffset = tileLocalCornerOffset;
+				tileLocalLabelOffset[faceIdx] *= 1.15;
+				tileLocalLabelOffset.Z += verticalOffset;
 				
-				auto tr = cornerTrs[facePointTile];
-				tr.SetLocation(tr.GetLocation() +
-								 (tr.GetRotation().GetForwardVector() * (cubeExtents * 0.1)) +
-								 (tr.GetRotation().GetUpVector() * (verticalOffset)));
-				cornerLabels[facePointTile]->GetComponent()->SetWorldTransform(tr);
+				cornerLabels[facePointTile]->SetWorldTransformFromSequence(
+					FTransform {
+						faceCenterLocalTr.GetRotation(),
+						tileLocalLabelOffset,
+						FVector::OneVector * labelScale
+					},
+					tileTr
+				);
 			}
 			if (cornerArrows[facePointTile].IsSet())
 			{
-				auto* arrow = cornerArrows[facePointTile]->GetComponent();
-				
-				auto arrowTr = FEditorArrowComponent::GetTransform(
-					faceTr.GetLocation(),
-					cornerTrs[facePointTile].GetLocation(),
-					10.0
+				auto faceWorldTr = WfcppUnrealEditor::ComposeTransforms(
+					faceCenterLocalTr,
+					tileTr
 				);
-				arrow->SetWorldTransform(FTransform{ arrowTr.GetRotation(), arrowTr.GetLocation() });
-				arrow->SetArrowSize(arrowTr.GetScale3D().Y);
-				arrow->SetArrowLength(arrowTr.GetScale3D().X);
+				auto arrowTr = FEditorArrowComponent::GetTransform(
+					faceWorldTr.GetLocation(),
+					tileTr.TransformPosition(tileLocalCornerOffset),
+					arrowThickness
+				);
+				
+				auto& arrow = cornerArrows[facePointTile];
+				arrow->SetWorldTransformFromSequence(WfcppUnrealEditor::WithoutScale(arrowTr));
+				arrow->GetComponent()->SetArrowSize(arrowTr.GetScale3D().Y);
+				arrow->GetComponent()->SetArrowLength(arrowTr.GetScale3D().X);
 			}
 		}
 	
@@ -184,35 +226,53 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 			
 			int faceEdgeParallelAxis = std::to_array({ faceAxis1, faceAxis2 })[edgeParallelAxis],
 				faceEdgePerpendicularAxis = std::to_array({ faceAxis1, faceAxis2 })[(edgeParallelAxis + 1) % 2];
-		
-			FVector edgeOffset{ 0, 0, 0 };
-			edgeOffset[faceEdgePerpendicularAxis] = (edgeSide == 0) ? -cubeExtents : cubeExtents;
-			edgeOffset = tileTr.TransformVector(edgeOffset);
-
-			edgeTrs[facePoint] = {
-				faceTr.Rotator(),
-				faceTr.GetLocation() + edgeOffset,
-				faceTr.GetScale3D()
-			};
+			
+			//Edge offsets must be in tile-local space, not face space,
+			//    otherwise they are affected by the face's rotation
+			//    causing details on opposite faces to not line up.
+			FVector tileLocalEdgeOffset;
+			tileLocalEdgeOffset[faceIdx] = cubeExtents * faceSign;
+			tileLocalEdgeOffset[faceEdgeParallelAxis] = 0;
+			tileLocalEdgeOffset[faceEdgePerpendicularAxis] = cubeExtents * (edgeSide == 0 ? -1 : 1);
+			FVector tileLocalEdgeDir = tileLocalEdgeOffset.GetUnsafeNormal();
+			
 			if (edgeLabels[facePoint].IsSet())
 			{
-				auto tr = cornerTrs[facePoint];
-				tr.SetLocation(tr.GetLocation() + tr.GetRotation().GetForwardVector() *
-							   (cubeExtents * 0.1));
-				edgeLabels[facePoint]->GetComponent()->SetWorldTransform(tr);
+				FVector tileLocalLabelOffset = tileLocalEdgeOffset;
+				tileLocalLabelOffset[faceEdgePerpendicularAxis] += edgeLabelOffset * (edgeSide == 0 ? -1 : 1);
+				tileLocalLabelOffset[faceIdx] *= 1.15;
+				
+				edgeLabels[facePoint]->SetWorldTransformFromSequence(
+					FTransform{
+						FQuat::Identity,
+						FVector::ZeroVector,
+						FVector::OneVector * labelScale
+					},
+					faceCenterLocalTr,
+					FTransform{
+						FQuat::Identity,
+						tileLocalLabelOffset - faceCenterLocalTr.GetLocation(),
+						FVector::OneVector
+					},
+					tileTr
+				);
 			}
 			if (edgeArrows[facePoint].IsSet())
 			{
-				auto* arrow = edgeArrows[facePoint]->GetComponent();
-				
-				auto arrowTr = FEditorArrowComponent::GetTransform(
-					faceTr.GetLocation(),
-					edgeTrs[facePoint].GetLocation(),
-					10.0
+				auto faceWorldTr = WfcppUnrealEditor::ComposeTransforms(
+					faceCenterLocalTr,
+					tileTr
 				);
-				arrow->SetWorldTransform(FTransform{ arrowTr.GetRotation(), arrowTr.GetLocation() });
-				arrow->SetArrowSize(arrowTr.GetScale3D().Y);
-				arrow->SetArrowLength(arrowTr.GetScale3D().X);
+				auto arrowTr = FEditorArrowComponent::GetTransform(
+					faceWorldTr.GetLocation(),
+					tileTr.TransformPosition(tileLocalEdgeOffset),
+					arrowThickness
+				);
+				
+				auto& arrow = edgeArrows[facePoint];
+				arrow->SetWorldTransformFromSequence(WfcppUnrealEditor::WithoutScale(arrowTr));
+				arrow->GetComponent()->SetArrowSize(arrowTr.GetScale3D().Y);
+				arrow->GetComponent()->SetArrowLength(arrowTr.GetScale3D().X);
 			}
 		}
 }
@@ -233,11 +293,15 @@ void FEditorSceneObject_WfcFace::RebuildColors()
 		FLinearColor{ 0.5, 0.5, 1, 1 }
 	});
 	FLinearColor cornerTint{ 0.85, 0.85, 0.85, 1 },
-				 edgeTint{ 0.5, 0.5, 0.5, 1 };
+				 edgeTint{ 0.5, 0.5, 0.5, 1 },
+				 fallbackTint{ 0.8, 0.8, 0.8 };
 
 	auto outputColor = [&](const FLinearColor& col) {
 		return (col * FLinearColor{ 1, 1, 1, alphaScale }).ToFColorSRGB();
 	};
+
+	if (fallbackLabel.IsSet())
+		fallbackLabel->GetComponent()->SetTextRenderColor(outputColor(faceColor * fallbackTint));
 	
 	if (centerSphere.IsSet())
 		centerSphere->GetComponent()->ShapeColor = outputColor(faceColor);

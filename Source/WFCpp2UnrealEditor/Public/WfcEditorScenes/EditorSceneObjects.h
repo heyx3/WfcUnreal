@@ -62,6 +62,7 @@ private:
 	WFC_Transforms2D facePermutation;
 
 	TOptional<FEditorWireSphereComponent> centerSphere;
+	TOptional<FEditorTextComponent> fallbackLabel;
 	TOptional<FEditorPlaneComponent> facePlane;
 	std::array<TOptional<FEditorTextComponent>, 4> cornerLabels, edgeLabels;
 	std::array<TOptional<FEditorArrowComponent>, 4> cornerArrows, edgeArrows;

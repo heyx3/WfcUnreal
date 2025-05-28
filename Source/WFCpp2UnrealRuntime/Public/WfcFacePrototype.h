@@ -56,6 +56,9 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	EWfcPointID PointBB = EWfcPointID::null;
 
+
+	//Checks whether all points are set to 'null'.
+	bool IsEmpty() const { return PointAA == EWfcPointID::null && PointAB == EWfcPointID::null && PointBA == EWfcPointID::null && PointBB == EWfcPointID::null; }
 	
 	//Gets all defined points that are enabled for this face, not including the default 'null' point.
 	TArray<FString, TInlineAllocator<3>> GatherPoints() const;
@@ -106,6 +109,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FWfcFacePointDefs Edges;
 	
+	//Checks whether all points are set to 'null'.
+	bool IsEmpty() const { return Corners.IsEmpty() && Edges.IsEmpty(); }
 	WFC::Tiled3D::FaceIdentifiers Unwrap(int pointIdOffset) const;
 
 	bool operator==(const FWfcFacePrototype& f2) const

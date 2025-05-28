@@ -68,6 +68,8 @@ void UWfcTileset::Unwrap(Unwrapped& output) const
         output.WfcFacePrototypeFirstIDs.Add(facePrototype.Get<0>(), nextPointID);
         nextPointID += 4;
     }
+    //In case a nonexistent face prototype is referenced, keep a special hidden null face around.
+    auto nullFaceFirstID = nextPointID;
 
     //Convert each serialized Unreal tile into a WFC library tile.
 	Tiles.GetKeys(output._sortedUnrealIDs);
@@ -98,15 +100,16 @@ void UWfcTileset::Unwrap(Unwrapped& output) const
         		assetFace.PrototypeOrientation = static_cast<WFC_Transforms2D>(WFC::Invert(static_cast<WFC::Transformations>(assetFace.PrototypeOrientation)));
         	
             //Generate the point ID's for this face.
-            const auto& prototype = FacePrototypes[assetFace.PrototypeID];
-            auto firstFaceID = output.WfcFacePrototypeFirstIDs[assetFace.PrototypeID];
+            const auto* prototype = FacePrototypes.Find(assetFace.PrototypeID);
+            auto* tryFirstFaceID = output.WfcFacePrototypeFirstIDs.Find(assetFace.PrototypeID);
+            auto firstFaceID = tryFirstFaceID ? *tryFirstFaceID : nullFaceFirstID;
             for (int pointI = 0; pointI < WFC::Tiled3D::N_FACE_POINTS; ++pointI)
             {
                 auto localPoint = static_cast<WFC::Tiled3D::FacePoints>(pointI);
                 auto prototypeCorner = assetFace.GetPrototypeCorner(localPoint),
             		 prototypeEdge = assetFace.GetPrototypeEdge(localPoint);
-                auto cornerID = prototype.Corners.PointAt(prototypeCorner),
-            		 edgeID = prototype.Edges.PointAt(prototypeEdge);
+                auto cornerID = prototype ? prototype->Corners.PointAt(prototypeCorner) : static_cast<EWfcPointID>(nullFaceFirstID),
+            		 edgeID = prototype ? prototype->Edges.PointAt(prototypeEdge) : static_cast<EWfcPointID>(nullFaceFirstID);
 
                 //Convert the 0-3 symmetry value stored in the asset,
                 //    into a unique index across all tile faces.
