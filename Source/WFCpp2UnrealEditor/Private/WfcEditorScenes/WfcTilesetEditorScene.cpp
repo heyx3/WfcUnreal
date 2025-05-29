@@ -68,25 +68,50 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 			case EWfcTilesetEditorMode::Tile:
 				viewMode.Emplace<FEditorSceneObject_WfcTile>(
 					*this, *owner,
-					FTransform{ }, FLinearColor{ 0, 0, 0, 1 },
-					tileset, *tile, currentPermutationToMatch
+					FTransform{ },
+					tileset, *tile, currentPermutationToMatch,
+					FEditorSceneObject_WfcTile_Settings{
+						{
+							1.0f, true
+						},
+						true,
+						FLinearColor{ 0, 0, 0, 1 }
+					}
 				);
 			break;
 			case EWfcTilesetEditorMode::Permutations:
 				viewMode.Emplace<FEditorSceneObject_WfcTileWithPermutations>(
 					*this, *owner,
 					FTransform{ }, SpacingBetweenTiles,
-					FLinearColor{ 0, 0, 0, 1 }, FLinearColor{ 0, 0, 0, 1 },
-					tileset, *tile
+					tileset, *tile,
+					FEditorSceneObject_WfcPermutations_Settings{
+						{
+							{
+								1.0f, true
+							},
+							true,
+							FLinearColor{ 0, 0, 0, 1 }
+						},
+						FLinearColor{ 0, 0, 0, 1 }, FLinearColor{ 0.4, 0.4, 0.4, 1 }
+					}
 				);
 			break;
 			case EWfcTilesetEditorMode::Matches:
 				viewMode.Emplace<FEditorSceneObject_WfcTileWithMatches>(
 					*this, *owner,
 					FTransform{ }, SpacingBetweenTiles,
-					FLinearColor{ 0, 0, 0, 1 }, FLinearColor{ 0, 0, 0, 1 },
 					tileset, *tile,
-					currentPermutationToMatch, currentFacesToMatch
+					currentPermutationToMatch, currentFacesToMatch,
+					FEditorSceneObject_WfcMatches_Settings{
+						{
+							{
+								1.0f, true
+							},
+							true,
+							FLinearColor{ 0, 0, 0, 1 }
+						},
+						FLinearColor{ 0, 0, 0, 1 }
+					}
 				);
 			break;
 			

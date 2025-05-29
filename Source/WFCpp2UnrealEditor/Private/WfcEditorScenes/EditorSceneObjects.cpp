@@ -16,9 +16,9 @@
 
 namespace
 {
-	UMaterialInterface* LoadFaceEditorMaterial(WFC_Directions3D face)
+	UMaterialInterface* LoadFaceEditorMaterial(TOptional<WFC_Directions3D> face)
 	{
-		static const TCHAR* const MaterialPaths[] = {
+		static const TCHAR* const MaterialPathsByColor[] = {
 			//Order must match ordering of WFC_Directions3D
 			TEXT("/WFCpp2/Editor/MI_FacePlane_MinX.MI_FacePlane_MinX"),
 			TEXT("/WFCpp2/Editor/MI_FacePlane_MaxX.MI_FacePlane_MaxX"),
@@ -27,9 +27,13 @@ namespace
 			TEXT("/WFCpp2/Editor/MI_FacePlane_MinZ.MI_FacePlane_MinZ"),
 			TEXT("/WFCpp2/Editor/MI_FacePlane_MaxZ.MI_FacePlane_MaxZ")
 		};
+		static const TCHAR* const MaterialPathGreyscale = {
+			TEXT("/WFCpp2/Editor/MI_FacePlane_Grey.MI_FacePlane_Grey")
+		};
+
 		return LoadObject<UMaterialInterface>(
 			nullptr,
-			MaterialPaths[static_cast<int>(face)],
+			face.IsSet() ? MaterialPathsByColor[static_cast<int>(*face)] : MaterialPathGreyscale,
 			nullptr, LOAD_EditorOnly
 		);
 	}
@@ -38,17 +42,20 @@ namespace
 FEditorSceneObject_WfcFace::FEditorSceneObject_WfcFace(FPreviewScene* owner,
                                                        const FTransform& _tileTr, double _cubeExtents,
                                                        WFC_Directions3D _face, const FWfcFacePrototype& _facePoints,
-                                                       WFC_Transforms2D _facePermutation)
+                                                       WFC_Transforms2D _facePermutation,
+                                                       const FEditorSceneObject_WfcFace_Settings& _settings)
     : FEditorSceneObject(owner),
 	  cubeExtents(_cubeExtents),
-      faceSide(_face), facePrototype(_facePoints), facePermutation(_facePermutation)
+      faceSide(_face), facePrototype(_facePoints), facePermutation(_facePermutation),
+	  settings(_settings)
 {
 	centerSphere.Emplace(Owner, FTransform{ }, FColor{ 1, 1, 1 });
-	facePlane.Emplace(Owner, FTransform{ }, LoadFaceEditorMaterial(faceSide));
+	facePlane.Emplace(Owner, FTransform{ }, LoadFaceEditorMaterial(settings.ColorByFace ? TOptional{ faceSide } : NullOpt));
 
-	//If the face is empty, then display its name at its center.
-	if (facePrototype.IsEmpty())
-		fallbackLabel.Emplace(Owner, FTransform{ }, facePrototype.Nickname, FColor{ 1, 1, 1 });
+	//Display the face's nickname at its center.
+	fallbackLabel.Emplace(Owner, FTransform{ }, facePrototype.Nickname, FColor{ 1, 1, 1 });
+
+	bool flipFaceCoords = !WFC::Tiled3D::IsFaceLeftHanded(static_cast<WFC::Tiled3D::Directions3D>(faceSide));
 	
 	//Generate components for the face corners.
 	auto doCorner = [&](WFC::Tiled3D::FacePoints pointLocationTile)
@@ -58,6 +65,8 @@ FEditorSceneObject_WfcFace::FEditorSceneObject_WfcFace(FPreviewScene* owner,
 			static_cast<WFC::Tiled3D::Directions3D>(faceSide),
 			WFC::Invert(static_cast<WFC::Transformations>(facePermutation))
 		);
+		bool minAxis1 = WFC::Tiled3D::IsCornerFirstAxisMin(pointLocationTile),
+			 minAxis2 = WFC::Tiled3D::IsCornerSecondAxisMin(pointLocationTile);
 		
 		cornerIDs[pointLocationTile] = facePrototype.Corners.PointAt(pointLocationPrototype);
 		
@@ -65,7 +74,9 @@ FEditorSceneObject_WfcFace::FEditorSceneObject_WfcFace(FPreviewScene* owner,
 		if (pointLabel != nullptr)
 		{
 			cornerArrows[pointLocationTile].Emplace(Owner, FTransform{ }, FColor{ });
-			cornerLabels[pointLocationTile].Emplace(Owner, FTransform{ }, *pointLabel, FColor{ });
+			cornerLabels[pointLocationTile].Emplace(Owner, FTransform{ }, *pointLabel, FColor{ },
+													((minAxis1 != flipFaceCoords) ? EHTA_Right : EHTA_Left),
+													(minAxis2 ? EVRTA_TextTop : EVRTA_TextBottom));
 
 			cornerArrows[pointLocationTile]->GetComponent()->bSelectable = false;
 			cornerLabels[pointLocationTile]->GetComponent()->bSelectable = false;
@@ -84,6 +95,8 @@ FEditorSceneObject_WfcFace::FEditorSceneObject_WfcFace(FPreviewScene* owner,
 			static_cast<WFC::Tiled3D::Directions3D>(faceSide),
 			WFC::Invert(static_cast<WFC::Transformations>(facePermutation))
 		);
+		bool parallelAxis1 = WFC::Tiled3D::IsEdgeParallelToFirstAxis(pointLocationTile),
+		     minEdge = WFC::Tiled3D::IsEdgeOnMinSide(pointLocationTile);
 
 		edgeIDs[pointLocationTile] = facePrototype.Edges.PointAt(pointLocationPrototype);
 		
@@ -91,7 +104,11 @@ FEditorSceneObject_WfcFace::FEditorSceneObject_WfcFace(FPreviewScene* owner,
 		if (pointLabel != nullptr)
 		{
 			edgeArrows[pointLocationTile].Emplace(Owner, FTransform{ }, FColor{ });
-			edgeLabels[pointLocationTile].Emplace(Owner, FTransform{ }, *pointLabel, FColor{ });
+			edgeLabels[pointLocationTile].Emplace(Owner, FTransform{ }, *pointLabel, FColor{ },
+											      (parallelAxis1 ? EHTA_Center :
+											       	  ((minEdge != flipFaceCoords) ? EHTA_Right : EHTA_Left)),
+											      (!parallelAxis1 ? EVRTA_TextCenter :
+											      	  ((minEdge != flipFaceCoords) ? EVRTA_TextTop : EVRTA_TextBottom)));
 
 			edgeArrows[pointLocationTile]->GetComponent()->bSelectable = false;
 			edgeLabels[pointLocationTile]->GetComponent()->bSelectable = false;
@@ -133,7 +150,7 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 	};
 
 	//Some transform data should grow with the tile size.
-	double arrowThickness = FMath::Lerp(2.5, 10.0, FMath::GetRangePct(100.0, 1000.0, cubeExtents)),
+	double arrowThickness = 0.5 * FMath::Lerp(2.5, 10.0, FMath::GetRangePct(100.0, 1000.0, cubeExtents)),
 		   labelScale = FMath::Lerp(0.25, 1.0, FMath::GetRangePct(100.0, 1000.0, cubeExtents)),
 		   sphereSize = FMath::Lerp(5.0, 25.0, FMath::GetRangePct(100.0, 1000.0, cubeExtents)),
 		   edgeLabelOffset = FMath::Pow(cubeExtents / 10, 0.5);
@@ -281,11 +298,13 @@ void FEditorSceneObject_WfcFace::RebuildColors()
 	auto rawFace = static_cast<WFC::Tiled3D::Directions3D>(faceSide);
 	int faceIdx = WFC::Tiled3D::GetAxisIndex(rawFace);
 	
-	auto faceColor = std::to_array({
-		FLinearColor{ 1, 0, 0 },
-		FLinearColor{ 0, 1, 0 },
-		FLinearColor{ 0, 0, 1 }
-	})[faceIdx];
+	auto faceColor = settings.ColorByFace ?
+					   std::to_array({
+					       FLinearColor{ 1, 0, 0 },
+						   FLinearColor{ 0, 1, 0 },
+						   FLinearColor{ 0, 0, 1 }
+					   })[faceIdx] :
+					   FLinearColor{ 0.2, 0.2, 0.2 };
 	auto pointIDTints = std::to_array({
 		FLinearColor{ 0, 0, 0, 1 },
 		FLinearColor{ 1, 0.5, 0.5, 1 },
@@ -294,10 +313,10 @@ void FEditorSceneObject_WfcFace::RebuildColors()
 	});
 	FLinearColor cornerTint{ 0.85, 0.85, 0.85, 1 },
 				 edgeTint{ 0.5, 0.5, 0.5, 1 },
-				 fallbackTint{ 0.8, 0.8, 0.8 };
+				 fallbackTint{ 0.8, 0.8, 0.8, 0.3 };
 
 	auto outputColor = [&](const FLinearColor& col) {
-		return (col * FLinearColor{ 1, 1, 1, alphaScale }).ToFColorSRGB();
+		return (col * FLinearColor{ 1, 1, 1, settings.AlphaScale }).ToFColorSRGB();
 	};
 
 	if (fallbackLabel.IsSet())
@@ -327,16 +346,16 @@ void FEditorSceneObject_WfcFace::RebuildColors()
 
 FEditorSceneObject_WfcTile::FEditorSceneObject_WfcTile(FWfcTilesetEditorScene& owner, FWfcTilesetEditorViewportClient& viewportClient,
 													   const FTransform& tr,
-													   const FLinearColor& boundsColor,
 													   const UWfcTileset* tileset, int32 tileID,
 													   const FWFC_Transform3D& permutation,
-													   bool includeVisualizer)
+													   const FEditorSceneObject_WfcTile_Settings& _settings)
     : FEditorSceneObject(&owner),
       tileBounds(Owner,
       			 FBox{ tr.GetLocation() - ((tileset->TileLength / 2.0) * tr.GetScale3D()),
       			 	   tr.GetLocation() + ((tileset->TileLength / 2.0) * tr.GetScale3D()) },
       			 tr.GetRotation().Rotator(),
-      			 boundsColor.ToFColorSRGB())
+      			 _settings.BoundsColor.ToFColorSRGB()),
+      settings(_settings)
 {
 	check(tileset);
 	check(tileset->Tiles.Contains(tileID));
@@ -355,10 +374,11 @@ FEditorSceneObject_WfcTile::FEditorSceneObject_WfcTile(FWfcTilesetEditorScene& o
 		
 		faces.Emplace(Owner, tr, tileset->TileLength / 2.0,
 			          static_cast<WFC_Directions3D>(dir),
-			          *facePrototype, faceData.PrototypeOrientation);
+			          *facePrototype, faceData.PrototypeOrientation,
+			          settings);
 	}
 
-	if (includeVisualizer)
+	if (settings.IncludeDataVisualizer)
 		tileDataVisualizer = WfcTileVisualizer::MakeVisualizer({
 			owner, viewportClient,
 			{ tileset }, tileID, permutation,
@@ -377,11 +397,10 @@ void FEditorSceneObject_WfcTile::SetTransform(const FTransform& newTr)
 FEditorSceneObject_WfcTileWithPermutations::FEditorSceneObject_WfcTileWithPermutations(
 			FWfcTilesetEditorScene& owner, FWfcTilesetEditorViewportClient& viewportClient,
 			const FTransform& rootTr, double spacingBetweenTiles,
-			const FLinearColor& boundsColor, const FLinearColor& labelColor,
 			const UWfcTileset* tileset, int32 tileID,
-			bool visualizeTileData
+			const FEditorSceneObject_WfcPermutations_Settings& _settings
 		)
-	: FEditorSceneObject(&owner)
+	: FEditorSceneObject(&owner), settings(_settings)
 {
 	if (!IsValid(tileset) || !tileset->Tiles.Contains(tileID))
 		return;
@@ -465,13 +484,17 @@ FEditorSceneObject_WfcTileWithPermutations::FEditorSceneObject_WfcTileWithPermut
 		);
 
 		//Create the visualizer.
+		auto permutationSettings = static_cast<FEditorSceneObject_WfcTile_Settings>(settings);
+		permutationSettings.ColorByFace = wfcTr.IsIdentity();
 		permutations.Emplace(
 			FEditorSceneObject_WfcTile{
 				owner, viewportClient, worldTr,
-				boundsColor, tileset, tileID, wfcTr, visualizeTileData
+				tileset, tileID, wfcTr,
+				permutationSettings
 			},
 			FEditorTextComponent{
-				Owner, labelTr, labelStr, labelColor.ToFColorSRGB(),
+				Owner, labelTr, labelStr,
+				(settings.LabelsTint * settings.PermutationLabelColor).ToFColorSRGB(),
 				EHTA_Center, EVRTA_TextBottom
 			},
 			wfcTr
@@ -493,7 +516,7 @@ FEditorSceneObject_WfcTileWithPermutations::FEditorSceneObject_WfcTileWithPermut
 			permutations.Num(),
 			static_cast<int>(Algo::CountIf(permutations, [&](const auto& perm) { return perm.WfcTransform.Invert; }))
 		),
-		labelColor.ToFColorSRGB(),
+		settings.LabelsTint.ToFColorSRGB(),
 		EHTA_Center, EVRTA_TextTop
 	);
 }
@@ -501,12 +524,11 @@ FEditorSceneObject_WfcTileWithPermutations::FEditorSceneObject_WfcTileWithPermut
 FEditorSceneObject_WfcTileWithMatches::FEditorSceneObject_WfcTileWithMatches(
 			FWfcTilesetEditorScene& owner, FWfcTilesetEditorViewportClient& viewportClient,
 			const FTransform& rootTr, double spacingBetweenTiles,
-			const FLinearColor& boundsColor, const FLinearColor& labelColor,
 			const UWfcTileset* tileset, int32 tileID, const FWFC_Transform3D& permutation,
 			const TSet<WFC_Directions3D>& facesToMatchAfterPermutation,
-			bool visualizeTileData
+			const FEditorSceneObject_WfcMatches_Settings& _settings
 		)
-	: FEditorSceneObject(&owner)
+	: FEditorSceneObject(&owner), settings(_settings)
 {
 	if (!IsValid(tileset) || !tileset->Tiles.Contains(tileID))
 		return;
@@ -520,9 +542,8 @@ FEditorSceneObject_WfcTileWithMatches::FEditorSceneObject_WfcTileWithMatches(
 				       		rootTr,
 				       		permutation.ToFTransform()
 				       ),
-				       boundsColor,
 					   tileset, tileID, permutation,
-					   visualizeTileData);
+					   settings);
 
 	for (auto _srcFace : facesToMatchAfterPermutation)
 	{
@@ -594,6 +615,8 @@ FEditorSceneObject_WfcTileWithMatches::FEditorSceneObject_WfcTileWithMatches(
 						)
 					);
 
+					auto matchSettings = static_cast<FEditorSceneObject_WfcTile_Settings>(settings);
+					matchSettings.ColorByFace = false;
 					matches.Emplace(
 						matchTileID, matchTilePermutation,
 						static_cast<WFC_Directions3D>(srcFace),
@@ -603,7 +626,8 @@ FEditorSceneObject_WfcTileWithMatches::FEditorSceneObject_WfcTileWithMatches(
 								matchedTileTr,
 								rootTr
 							),
-							boundsColor, tileset, matchTileID, matchTilePermutation
+							tileset, matchTileID, matchTilePermutation,
+							matchSettings
 						},
 						FEditorTextComponent{
 							&owner,
@@ -616,7 +640,7 @@ FEditorSceneObject_WfcTileWithMatches::FEditorSceneObject_WfcTileWithMatches(
 								    *matchTileData.Data->GetEditorDescription() :
 								    TEXT("[null]")
 							),
-							labelColor.ToFColorSRGB(),
+							settings.LabelsTint.ToFColorSRGB(),
 							EHTA_Center, EVRTA_TextBottom
 						}
 					);
@@ -627,6 +651,13 @@ FEditorSceneObject_WfcTileWithMatches::FEditorSceneObject_WfcTileWithMatches(
 		}
 		
 		//Add an informative label on top of the source tile's face.
+		FLinearColor faceLabelColor = settings.LabelsTint;
+		if (settings.ColorByFace)
+			faceLabelColor *= std::to_array({
+				FLinearColor{ 1.0, 0.5, 0.5 },
+				FLinearColor{ 0.5, 1.0, 0.5 },
+				FLinearColor{ 0.5, 0.5, 1.0 }
+			})[WFC::Tiled3D::GetAxisIndex(srcFace)];
 		WFC::Vector3i faceDir = WFC::Tiled3D::GetFaceDirection(srcFace);
 		auto faceLabelPos = FVector(faceDir.x, faceDir.y, faceDir.z) * ((tileset->TileLength / 2.0) - 20);
 		faceLabelPos.Z += 20 * (srcFace == WFC::Tiled3D::Directions3D::MinZ ? -1 : 1);
@@ -637,7 +668,7 @@ FEditorSceneObject_WfcTileWithMatches::FEditorSceneObject_WfcTileWithMatches(
 				rootTr
 			),
 			FString::Printf(TEXT("%i matches"), matchI1-1),
-			labelColor.ToFColorSRGB(),
+			faceLabelColor.ToFColorSRGB(),
 			EHTA_Center,
 			(srcFace == WFC::Tiled3D::Directions3D::MinZ ? EVRTA_TextTop : EVRTA_TextBottom)
 		);

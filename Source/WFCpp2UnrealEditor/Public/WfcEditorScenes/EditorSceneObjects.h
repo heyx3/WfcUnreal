@@ -29,6 +29,29 @@ public:
 	virtual void Tick(float deltaSeconds) { }
 };
 
+
+struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcFace_Settings
+{
+	float AlphaScale = 1;
+	bool ColorByFace = true;
+};
+struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcTile_Settings : public FEditorSceneObject_WfcFace_Settings
+{
+	bool IncludeDataVisualizer = true;
+	FLinearColor BoundsColor = { 0, 0, 0, 1 };
+};
+
+struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcPermutations_Settings : public FEditorSceneObject_WfcTile_Settings
+{
+	FLinearColor PermutationLabelColor = { 0.1, 0.1, 0.1, 1 };
+	FLinearColor LabelsTint = { 0.5, 0.5, 0.5, 1 };
+};
+struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcMatches_Settings : public FEditorSceneObject_WfcTile_Settings
+{
+	FLinearColor LabelsTint = { 0.5, 0.5, 0.5, 1 };
+};
+
+
 //An editor object that displays the symmetry info for a WFC tile face.
 struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcFace : public FEditorSceneObject
 {
@@ -38,7 +61,8 @@ public:
 							   const FTransform& tileTransform, double cubeExtents,
 							   WFC_Directions3D faceDir,
 							   const FWfcFacePrototype& faceData,
-							   WFC_Transforms2D facePermutation);
+							   WFC_Transforms2D facePermutation,
+							   const FEditorSceneObject_WfcFace_Settings& settings);
 
 	void SetTileTransform(const FTransform& tr)
 	{
@@ -47,7 +71,7 @@ public:
 	}
 	void SetAlphaScale(float newScale)
 	{
-		alphaScale = newScale;
+		settings.AlphaScale = newScale;
 		RebuildColors();
 	}
 
@@ -68,7 +92,8 @@ private:
 	std::array<TOptional<FEditorArrowComponent>, 4> cornerArrows, edgeArrows;
 	std::array<EWfcPointID, 4> cornerIDs, edgeIDs;
 
-	float alphaScale = 1.0f;
+	FEditorSceneObject_WfcFace_Settings settings;
+	
 
 	void RebuildColors();
 	void RebuildTransform();
@@ -81,9 +106,8 @@ public:
 
 	FEditorSceneObject_WfcTile(FWfcTilesetEditorScene& owner, class FWfcTilesetEditorViewportClient& viewportClient,
 							   const FTransform& worldTr,
-							   const FLinearColor& boundsColor,
 							   const class UWfcTileset* tileset, int32 tileID, const FWFC_Transform3D& permutation,
-							   bool includeVisualizer = true);
+							   const FEditorSceneObject_WfcTile_Settings& settings);
 
 	FTransform GetCurrentTransform() const { return currentTr; }
 	void SetTransform(const FTransform& newTr);
@@ -100,6 +124,8 @@ private:
  	TArray<FEditorSceneObject_WfcFace, TInlineAllocator<WFC::Tiled3D::N_DIRECTIONS_3D>> faces;
 	FEditorWireBoxComponent tileBounds;
 	TUniquePtr<WfcTileVisualizer> tileDataVisualizer;
+
+	FEditorSceneObject_WfcTile_Settings settings;
 };
 
 //Displays all supported permutations of one WFC tile.
@@ -109,9 +135,8 @@ public:
 
 	FEditorSceneObject_WfcTileWithPermutations(FWfcTilesetEditorScene& owner, FWfcTilesetEditorViewportClient& viewportClient,
 										       const FTransform& tr, double spacingBetweenTiles,
-											   const FLinearColor& boundsColor, const FLinearColor& labelColor,
 											   const class UWfcTileset* tileset, int32 tileID,
-											   bool visualizeTileData = true);
+											   const FEditorSceneObject_WfcPermutations_Settings& settings);
 
 private:
 
@@ -126,6 +151,8 @@ private:
 	};
 	TArray<Permutation, TInlineAllocator<WFC::Tiled3D::N_TRANSFORMS>> permutations;
 	TOptional<FEditorTextComponent> overallLabel;
+
+	FEditorSceneObject_WfcPermutations_Settings settings;
 };
 
 struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcTileWithMatches : public FEditorSceneObject
@@ -134,10 +161,10 @@ public:
 
 	FEditorSceneObject_WfcTileWithMatches(FWfcTilesetEditorScene& owner, FWfcTilesetEditorViewportClient& viewportClient,
 										  const FTransform& tr, double spacingBetweenTiles,
-										  const FLinearColor& boundsColor, const FLinearColor& labelColor,
-										  const class UWfcTileset* tileset, int32 tileID, const FWFC_Transform3D& permutation,
+										  const class UWfcTileset* tileset, int32 tileID,
+										  const FWFC_Transform3D& permutation,
 										  const TSet<WFC_Directions3D>& facesToMatchAfterPermutation,
-										  bool visualizeTileData = true);
+										  const FEditorSceneObject_WfcMatches_Settings& settings);
 
 private:
 
@@ -145,6 +172,8 @@ private:
 	TOptional<FEditorSceneObject_WfcTile> sourceTile;
 
 	TArray<FEditorTextComponent> faceLabels;
+
+	FEditorSceneObject_WfcMatches_Settings settings;
 	
 	struct Match
 	{

@@ -29,7 +29,7 @@ public:
     UPROPERTY(BlueprintReadWrite, EditAnywhere)
     UStaticMesh* Mesh = nullptr;
 
-    virtual FString GetEditorDescription_Implementation() const override { return Mesh->GetName(); }
+    virtual FString GetEditorDescription_Implementation() const override { return IsValid(Mesh) ? Mesh->GetName() : FString(TEXT("[null]")); }
 };
 
 //Associates a WFC tile with an actor.
