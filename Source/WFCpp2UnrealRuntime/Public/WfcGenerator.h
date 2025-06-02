@@ -66,6 +66,7 @@ public:
 	void Start(const UWfcTileset* tiles, const FIntVector& gridSize,
 	           int seedU32 = 1234567890,
 	           float temperatureClearGrowthRateT = 0.5f,
+	           float fuzziness = 0.1f,
 	           bool periodicX = false,
 	           bool periodicY = false,
 	           bool periodicZ = false);

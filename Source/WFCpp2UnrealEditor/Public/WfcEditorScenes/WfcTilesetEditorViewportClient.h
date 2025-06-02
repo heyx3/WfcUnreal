@@ -2,8 +2,6 @@
 
 #include "EditorViewportClient.h"
 
-#include "WfcTilesetEditorScene.h"
-
 
 //Based on this wonderful tutorial:
 //  https://easycomplex-tech.com/blog/Unreal/AssetEditor/UEAssetEditorDev-AssetEditorPreview/

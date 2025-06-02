@@ -1,6 +1,7 @@
 ﻿#include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
 
 #include "WFCpp2UnrealEditor.h"
+#include "WfcEditorScenes/WfcTilesetEditorScene.h"
 
 
 FWfcTilesetEditorViewportClient::FWfcTilesetEditorViewportClient(FWfcTilesetEditorScene& scene)

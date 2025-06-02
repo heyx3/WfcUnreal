@@ -149,7 +149,7 @@ void UWfcGenerator::GetTemperatureData(float& out_min, float& out_max,
 void UWfcGenerator::Start(const UWfcTileset* tiles,
                           const FIntVector& gridSize,
 			              int seed,
-						  float temperatureClearGrowthRateT,
+						  float temperatureClearGrowthRateT, float fuzziness,
 					      bool periodicX, bool periodicY, bool periodicZ)
 {
 	//Clean up from any previous runs.
@@ -170,6 +170,7 @@ void UWfcGenerator::Start(const UWfcTileset* tiles,
 	    nullptr,
 	    WFC::PRNG(seed)
 	);
+	state->PriorityWeightRandomness = fuzziness,
 	state->ClearRegionGrowthRateT = temperatureClearGrowthRateT;
 	status = WfcSimState::Running;
 }
