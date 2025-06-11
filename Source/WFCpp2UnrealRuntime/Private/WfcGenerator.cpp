@@ -26,11 +26,7 @@ float UWfcGenerator::GetProgress() const
 	}
 }
 
-bool UWfcGenerator::GetCell(const FIntVector& cellPos,
-				    		WfcTileID& out_tileID,
-				    		UWfcTileGameData*& out_tileData,
-						    FWFC_Transform3D& out_tileTransform,
-						    float& out_temperature) const
+FWfcCellStatus UWfcGenerator::GetCell(const FIntVector& cellPos) const
 {
 	checkf(GetStatus() != WfcSimState::Off, TEXT("Simulation hasn't started yet"));
 	verify(state.IsSet());
@@ -44,31 +40,28 @@ bool UWfcGenerator::GetCell(const FIntVector& cellPos,
 		UE_LOG(LogWFCpp, Error, TEXT("Given out-of-range grid pos: %i,%i,%i / %i,%i,%i"),
 				wfcPos.x, wfcPos.y, wfcPos.z,
 				wfcBounds.MaxExclusive.x, wfcBounds.MaxExclusive.y, wfcBounds.MaxExclusive.z);
-		out_tileID = -1;
-		out_tileData = nullptr;
-		out_tileTransform = { WFC_Rotations3D::None, false };
-		out_temperature = 0;
-		
-		return false;
+
+		return { -1, false, { }, { } };
 	}
 
-	out_temperature = wfc.GetTemperature(wfcPos);
+	float temperature = wfc.GetTemperature(wfcPos);
 	
 	const auto& cell = wfc.Grid.Cells[wfcPos];
 	if (cell.IsSet())
 	{
-	    out_tileID = wfcLibraryData.WfcTileIDs[cell.ChosenTile];
-	    out_tileData = tileset->Tiles[out_tileID].Data;
-	    out_tileTransform = { static_cast<WFC_Rotations3D>(cell.ChosenPermutation.Rot),
-	                          cell.ChosenPermutation.Invert };
-		return true;
+		auto tileID = wfcLibraryData.WfcTileIDs[cell.ChosenTile];
+		return { temperature, true, { }, {
+			tileID,
+			{
+				static_cast<WFC_Rotations3D>(cell.ChosenPermutation.Rot),
+				cell.ChosenPermutation.Invert
+			},
+			tileset->Tiles[tileID].Data
+		} };
 	}
 	else
 	{
-		out_tileID = -1;
-		out_tileData = nullptr;
-		out_tileTransform = { WFC_Rotations3D::None, false };
-		return false;
+		return { temperature, false, { cell.NPossibilities }, { } };
 	}
 }
 void UWfcGenerator::SetCell(const FIntVector& cell, int32 unrealTileID, FWFC_Transform3D permutation, bool persistent)
@@ -115,6 +108,11 @@ void UWfcGenerator::SetFace(const FIntVector& cell, WFC_Directions3D face,
 	);
 }
 
+int UWfcGenerator::GetNTilePossibilities() const
+{
+	return state.IsSet() ? state->Grid.NPermutedTiles : 0;
+}
+
 
 void UWfcGenerator::Stop()
 {
@@ -149,7 +147,7 @@ void UWfcGenerator::GetTemperatureData(float& out_min, float& out_max,
 void UWfcGenerator::Start(const UWfcTileset* tiles,
                           const FIntVector& gridSize,
 			              int seed,
-						  float temperatureClearGrowthRateT, float fuzziness,
+						  float temperatureClearGrowthRateT, float fuzziness, int maxUnwinding,
 					      bool periodicX, bool periodicY, bool periodicZ)
 {
 	//Clean up from any previous runs.
@@ -172,6 +170,7 @@ void UWfcGenerator::Start(const UWfcTileset* tiles,
 	);
 	state->PriorityWeightRandomness = fuzziness,
 	state->ClearRegionGrowthRateT = temperatureClearGrowthRateT;
+	state->MaxUnwindingCount = maxUnwinding;
 	status = WfcSimState::Running;
 }
 void UWfcGenerator::Cancel()

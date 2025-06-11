@@ -72,7 +72,9 @@ void UWfcTileset::Unwrap(Unwrapped& output) const
     auto nullFaceFirstID = nextPointID;
 
     //Convert each serialized Unreal tile into a WFC library tile.
+    //Sort the Unreal tile ID's for determinism.
 	Tiles.GetKeys(output._sortedUnrealIDs);
+    output._sortedUnrealIDs.Sort([](auto lhs, auto rhs) { return lhs < rhs; });
 	for (auto tileID : output._sortedUnrealIDs)
     {
     	auto& tileData = Tiles[tileID];

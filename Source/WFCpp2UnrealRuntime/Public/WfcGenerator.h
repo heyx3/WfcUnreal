@@ -12,6 +12,53 @@ enum class WfcSimState : uint8
     Off, Running, Finished
 };
 
+//Info about a cell in WFC generation that has been set already.
+USTRUCT(BlueprintType)
+struct FWfcCellSet
+{
+	GENERATED_BODY()
+public:
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	int TileID = -1;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FWFC_Transform3D TilePermutation;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	UWfcTileGameData* TileGameData = nullptr;
+};
+
+//Info about a cell in WFC generation that has not been set yet.
+USTRUCT(BlueprintType)
+struct FWfcCellUnset
+{
+	GENERATED_BODY()
+public:
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	int NPossibilities = 0;
+};
+
+//Info about a cell in WFC generation.
+USTRUCT(BlueprintType)
+struct FWfcCellStatus
+{
+	GENERATED_BODY()
+public:
+
+	//A metric that increases as a cell gets repeatedly cleared within a short number of ticks. 
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	float Temperature = 0;
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool IsSet = false;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FWfcCellUnset IfUnset;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FWfcCellSet IfSet;
+};
+
 
 //Encapsulates the running of the WFC algorithm on a tileset.
 UCLASS(BlueprintType)
@@ -41,11 +88,9 @@ public:
     //Gets the tile assigned to the given cell, if one has been assigned yet.
     //If no tile has been assigned, returns "false".
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
-	bool GetCell(const FIntVector& cell,
-				 int32& out_tileID,
-				 UWfcTileGameData*& out_tileData,
-				 FWFC_Transform3D& out_tileTransform,
-				 float& outTemperature) const;
+	FWfcCellStatus GetCell(const FIntVector& cell) const;
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
+	int GetNTilePossibilities() const;
 	//Calculates detailed info on the temperature of unsolved cells across the entire grid.
 	UFUNCTION(BlueprintCallable, Category="WFC/Algorithm")
 	void GetTemperatureData(float& min, float& max,
@@ -67,6 +112,7 @@ public:
 	           int seedU32 = 1234567890,
 	           float temperatureClearGrowthRateT = 0.5f,
 	           float fuzziness = 0.1f,
+	           int maxUnwinding = 0,
 	           bool periodicX = false,
 	           bool periodicY = false,
 	           bool periodicZ = false);
