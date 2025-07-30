@@ -22,6 +22,40 @@ enum class WFC_Directions3D : uint8
 static_assert(static_cast<int>(WFC_Directions3D::MinX) == WFC::Tiled3D::Directions3D::MinX,
 			  "Needed to satisfy the compiler");
 
+//Unique identifiers for the four corners or edges of a face,
+//     ordered in world-space to achieve trivial comparison of opposite faces.
+//Axes are always ordered X->Y->Z, for example on the Y face axis 1 is X and axis 2 is Z.
+//
+//For the four corners, each letter puts you on the Min ('A') or Max ('B') of that face axis.
+//For example on the X face, 'BA' means the 'MaxY-MinZ' corner.
+//
+//For the four edges, the first letter represents
+//    the axis parallel to that edge, 1 ('A') or 2 ('B'),
+//    while the second letter represents Min or Max side.
+//E.g. on the Y face 'AB' means the {0, 0, 1}=>{1, 0, 1} edge
+//    and 'BB' means the {1, 0, 0}=>{1, 0, 1} edge.
+//
+/*  Refer to the diagram below:
+		2
+		AB ----- AB ----- BB
+		|                  |
+		|                  |
+		BA                 BB
+		|                  |
+		|                  |
+		AA ----- AA ----- BA 1
+		Origin
+*/
+UENUM(Category=WFC, BlueprintType)
+enum class WFC_FacePoints : uint8
+{
+	AA = WFC::Tiled3D::FacePoints::AA,
+	AB = WFC::Tiled3D::FacePoints::AB,
+	BA = WFC::Tiled3D::FacePoints::BA,
+	BB = WFC::Tiled3D::FacePoints::BB
+};
+ENUM_RANGE_BY_COUNT(WFC_FacePoints, WFC::Tiled3D::N_FACE_POINTS);
+
 UENUM(Category=WFC, BlueprintType)
 enum class WFC_Transforms2D : uint8
 {

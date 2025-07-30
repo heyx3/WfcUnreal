@@ -26,6 +26,7 @@ enum class EWfcPointID : uint8
 ENUM_RANGE_BY_COUNT(EWfcPointID, 4);
 
 //Definitions for a set of corners or edges on one tile face.
+//The default constructor makes a perfectly-symmetrical face.
 USTRUCT(BlueprintType)
 struct WFCPP2UNREALRUNTIME_API FWfcFacePointDefs
 {
@@ -47,12 +48,16 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditCondition="AddPoint3"))
 	FString NameOfPoint3 = TEXT("p3");
 
+	//To understand which point 'AA' is, see 'WFC::Tiled3D::FacePoints'.
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	EWfcPointID PointAA = EWfcPointID::null;
+	//To understand which point 'AB' is, see 'WFC::Tiled3D::FacePoints'.
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	EWfcPointID PointAB = EWfcPointID::null;
+	//To understand which point 'BA' is, see 'WFC::Tiled3D::FacePoints'.
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	EWfcPointID PointBA = EWfcPointID::null;
+	//To understand which point 'BB is, see 'WFC::Tiled3D::FacePoints'.
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	EWfcPointID PointBB = EWfcPointID::null;
 

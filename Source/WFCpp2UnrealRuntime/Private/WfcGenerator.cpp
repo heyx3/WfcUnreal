@@ -2,6 +2,7 @@
 
 #include "WFCpp2UnrealRuntime.h"
 
+
 float UWfcGenerator::GetProgress() const
 {
 	switch (GetStatus())
@@ -25,10 +26,23 @@ float UWfcGenerator::GetProgress() const
 		default: return nanf(nullptr);
 	}
 }
-
-FWfcCellStatus UWfcGenerator::GetCell(const FIntVector& cellPos) const
+FIntVector UWfcGenerator::GetGridSize() const
 {
-	checkf(GetStatus() != WfcSimState::Off, TEXT("Simulation hasn't started yet"));
+	if (state.IsSet())
+		return { state->Grid.Cells.GetWidth(), state->Grid.Cells.GetHeight(), state->Grid.Cells.GetDepth() };
+
+	UE_LOG(LogWFCpp, Error, TEXT("UWfcGenerator: Called GetGridSize() before the generation started! Returning 0"));
+	return { 0, 0, 0 };
+}
+
+
+FWfcCellStatus UWfcGenerator::GetCell(const FIntVector& cellPos, bool copyInData) const
+{
+	if (GetStatus() == WfcSimState::Off)
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("UWfcGenerator::GetCell(): Simulation hasn't started yet!"));
+		return { };
+	}
 	verify(state.IsSet());
 	const auto& wfc = state.GetValue();
 
@@ -68,7 +82,7 @@ void UWfcGenerator::SetCell(const FIntVector& cell, int32 unrealTileID, FWFC_Tra
 {
 	if (!state.IsSet())
 	{
-		UE_LOG(LogWFCpp, Error, TEXT("Can't set a WFC grid cell because the WFC generator isn't initialized yet!"));
+		UE_LOG(LogWFCpp, Error, TEXT("Can't set a WFC grid cell, because the WFC generator isn't initialized yet!"));
 		return;
 	}
 	if (!state->Grid.Cells.IsIndexValid({ cell.X, cell.Y, cell.Z }))
@@ -83,11 +97,18 @@ void UWfcGenerator::SetCell(const FIntVector& cell, int32 unrealTileID, FWFC_Tra
 }
 
 void UWfcGenerator::SetFace(const FIntVector& cell, WFC_Directions3D face,
-							int facePrototypeId, WFC_Transforms2D facePermutationOrientation)
+							int facePrototypeId, WFC_Transforms2D facePermutationOrientation,
+							bool invert)
 {
+	if (invert)
+	{
+		SetFaceNot(cell, face, facePrototypeId, facePermutationOrientation);
+		return;
+	}
+	
 	if (!state.IsSet())
 	{
-		UE_LOG(LogWFCpp, Error, TEXT("Can't set a WFC grid cell because the WFC generator isn't initialized yet!"));
+		UE_LOG(LogWFCpp, Error, TEXT("Can't set a WFC grid face, because the WFC generator isn't initialized yet!"));
 		return;
 	}
 	if (!state->Grid.Cells.IsIndexValid({ cell.X, cell.Y, cell.Z }))
@@ -107,6 +128,33 @@ void UWfcGenerator::SetFace(const FIntVector& cell, WFC_Directions3D face,
 		points.Unwrap(wfcLibraryData.WfcFacePrototypeFirstIDs[facePrototypeId])
 	);
 }
+void UWfcGenerator::SetFaceNot(const FIntVector& cell, WFC_Directions3D face,
+							   int facePrototypeId, WFC_Transforms2D facePermutationOrientation)
+{
+	if (!IsRunning())
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("Can't forbid a WFC grid face, because the WFC generator isn't initialized yet!"));
+		return;
+	}
+	if (!state->Grid.Cells.IsIndexValid({ cell.X, cell.Y, cell.Z }))
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("Cell index is out of range: %i,%i,%i"), cell.X, cell.Y, cell.Z);
+		return;
+	}
+	if (facePrototypeId < 0 || facePrototypeId >= tileset->FacePrototypes.Num())
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("Face prototype index is invalid: %i/%i"), facePrototypeId, tileset->FacePrototypes.Num());
+		return;
+	}
+	check(state.IsSet());
+
+	auto points = tileset->FacePrototypes[facePrototypeId];
+	state->SetFaceConstraintNot(
+		{ cell.X, cell.Y, cell.Z }, static_cast<WFC::Tiled3D::Directions3D>(face),
+		points.Unwrap(wfcLibraryData.WfcFacePrototypeFirstIDs[facePrototypeId])
+	);
+}
+
 
 int UWfcGenerator::GetNTilePossibilities() const
 {
@@ -165,7 +213,6 @@ void UWfcGenerator::Start(const UWfcTileset* tiles,
 	//Start the algorithm.
 	state.Emplace(
 	    wfcLibraryData.Tiles, WFC::Vector3i(gridSize.X, gridSize.Y, gridSize.Z),
-	    nullptr,
 	    WFC::PRNG(seed)
 	);
 	state->PriorityWeightRandomness = fuzziness,
@@ -179,12 +226,16 @@ void UWfcGenerator::Cancel()
     state.Reset();
 }
 
-void UWfcGenerator::Tick()
+void UWfcGenerator::Tick(int nIterations)
 {
-    checkf(IsRunning(), TEXT("Can't Tick the WFC algorithm if it isn't running!"));
+	if (!IsRunning())
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("Can't Tick the UWfcGenerator if it isn't running!"));
+        return;
+	}
     check(state.IsSet());
 	
-    bool isFinished = state->Tick();
+    bool isFinished = state->TickN(nIterations);
     if (isFinished)
         status = WfcSimState::Finished;
     else

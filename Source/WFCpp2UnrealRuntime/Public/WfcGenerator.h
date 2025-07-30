@@ -75,6 +75,9 @@ public:
     UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm", meta=(CompactNodeTitle="Running?"))
     bool IsRunning() const { return GetStatus() == WfcSimState::Running; }
 
+
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
+	FIntVector GetGridSize() const;
     //Returns a progress indicator from 0 to 1.
     UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
     float GetProgress() const;
@@ -87,8 +90,16 @@ public:
 
     //Gets the tile assigned to the given cell, if one has been assigned yet.
     //If no tile has been assigned, returns "false".
+	//
+	//If the cell is set, the return value can contain a copy of the tile's 'Data' field.
+	//If you decline, it will always be left null (an instance of 'FWfcGameData').
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
-	FWfcCellStatus GetCell(const FIntVector& cell) const;
+	FWfcCellStatus GetCell(const FIntVector& cell, bool copyInData) const;
+	//A more efficient C++ version of 'GetCell'.
+	//The cell's custom data is never copied into the returned struct,
+	//    instead being given as an extra pointer to it (if it exists, else null).
+	TTuple<FWfcCellStatus, const TInstancedStruct<FWfcGameData>*> GetCellWithPtr(const FIntVector& cell);
+	
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
 	int GetNTilePossibilities() const;
 	//Calculates detailed info on the temperature of unsolved cells across the entire grid.
@@ -126,9 +137,16 @@ public:
 				 int32 tileID, FWFC_Transform3D permutation,
 				 bool persistent = true);
 	//Constrains the generator to always output the given face at the given cell.
+	//This cannot be undone.
 	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
 	void SetFace(const FIntVector& cell, WFC_Directions3D face,
-				 int facePrototypeId, WFC_Transforms2D facePermutationOrientation);
+				 int facePrototypeId, WFC_Transforms2D facePermutationOrientation,
+				 bool invert = false);
+	//Constrains the generator to *never* output the given face at the given cell.
+	//This cannot be undone.
+	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
+	void SetFaceNot(const FIntVector& cell, WFC_Directions3D face,
+					int facePrototypeId, WFC_Transforms2D facePermutationOrientation);
 
 	//Stops running the generator, leaving unset cells as permanently unsolved.
 	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
@@ -137,7 +155,7 @@ public:
 
     //Fails if the algorithm isn't running.
 	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
-	void Tick();
+	void Tick(int nIterations = 1);
 
 	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
 	void Cancel();
