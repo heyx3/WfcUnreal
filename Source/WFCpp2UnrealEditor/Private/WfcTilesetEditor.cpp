@@ -117,10 +117,28 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 		{
 			case EWfcTilesetEditorMode::Tile:
 			case EWfcTilesetEditorMode::Permutations:
+			case EWfcTilesetEditorMode::Generation:
 				return EVisibility::Collapsed;
+			
 			case EWfcTilesetEditorMode::Matches:
 				return EVisibility::Visible;
 									
+			default:
+				check(false);
+				return EVisibility::Hidden;
+		}
+	};
+	auto showIfGeneratingFn = [&]() {
+		switch (GetScene().Mode)
+		{
+			case EWfcTilesetEditorMode::Matches:
+			case EWfcTilesetEditorMode::Permutations:
+			case EWfcTilesetEditorMode::Tile:
+				return EVisibility::Collapsed;
+			
+			case EWfcTilesetEditorMode::Generation:
+				return EVisibility::Visible;
+
 			default:
 				check(false);
 				return EVisibility::Hidden;
@@ -178,6 +196,30 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 		reinterpret_cast<uint8_t*>(&GetScene().PermutationToMatchAgainst)
 	);
 	editorForPermutationToMatch->SetStructureData(MakeShareable(scopedMatchingPermutationStruct));
+
+	//Set up a property editor for the generator settings.
+	FDetailsViewArgs generatorSettingsEditorArgs;
+	generatorSettingsEditorArgs.bAllowSearch = false;
+	generatorSettingsEditorArgs.bHideSelectionTip = true;
+	generatorSettingsEditorArgs.bSearchInitialKeyFocus = true;
+	generatorSettingsEditorArgs.bShowOptions = true;
+	generatorSettingsEditorArgs.bLockable = false;
+	generatorSettingsEditorArgs.bUpdatesFromSelection = false;
+	generatorSettingsEditorArgs.bShowScrollBar = false;
+	generatorSettingsEditorArgs.bShowModifiedPropertiesOption = false;
+	FStructureDetailsViewArgs generatorSettingsEditorStructArgs;
+	generatorSettingsEditorStructArgs.bShowObjects = true;
+	generatorSettingsEditorStructArgs.bShowAssets = true;
+	generatorSettingsEditorStructArgs.bShowClasses = true;
+	generatorSettingsEditorStructArgs.bShowInterfaces = true;
+	editorForGeneratorSettings = propertyEditorModule.CreateStructureDetailView(
+		generatorSettingsEditorArgs, generatorSettingsEditorStructArgs, nullptr
+	);
+	auto* scopedGeneratorSettingsStruct = new FStructOnScope(
+		FEditorSceneObject_WfcGeneration_Settings::StaticStruct(),
+		reinterpret_cast<uint8_t*>(&GetScene().GenerationSettings)
+	);
+	editorForGeneratorSettings->SetStructureData(MakeShareable(scopedGeneratorSettingsStruct));
 	
 	return SAssignNew(tileSelectorTab, SDockTab)
 			.Icon(FEditorStyle::GetBrush("GenericEditor.Tabs.Properties"))
@@ -222,6 +264,7 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 									return EVisibility::Collapsed;
 								case EWfcTilesetEditorMode::Matches:
 								case EWfcTilesetEditorMode::Permutations:
+								case EWfcTilesetEditorMode::Generation:
 									return EVisibility::Visible;
 								
 								default:
@@ -273,6 +316,35 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 					SNew(SHorizontalBox)
 					    .Visibility_Lambda(showIfMatchingFn)
 					+ SHorizontalBox::Slot() [ editorForPermutationToMatch->GetWidget()->AsShared() ]
+				]
+				+ SScrollBox::Slot()
+				[
+					SNew(SHorizontalBox)
+						.Visibility_Lambda(showIfGeneratingFn)
+					+ SHorizontalBox::Slot() [ editorForGeneratorSettings->GetWidget()->AsShared() ]
+				]
+				+ SScrollBox::Slot()
+				[
+					SNew(SHorizontalBox)
+						.Visibility_Lambda(showIfGeneratingFn)
+					+ SHorizontalBox::Slot()
+					[
+						SNew(STextBlock)
+							.Text(FText::FromString(TEXT("Ticks")))
+					]
+					+ SHorizontalBox::Slot()
+					[
+						SNew(SSpinBox<int>)
+							.Value_Lambda([&]() { return nTicksPerClick; })
+						    .OnValueChanged_Lambda([&](int newVal) { nTicksPerClick = newVal; })
+						    .MinValue(1)
+					]
+					+ SHorizontalBox::Slot()
+					[
+						SNew(SButton)
+							.Text(FText::FromString(TEXT("Execute")))
+							.OnPressed_Lambda([&]() { GetScene().NGeneratorTicksToRun += nTicksPerClick; })
+					]
 				]
 			];
 }

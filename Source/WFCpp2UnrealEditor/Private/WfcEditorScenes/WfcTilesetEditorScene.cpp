@@ -36,30 +36,29 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
     check(owner);
 
 	//Get the new tile data if it exists.
-	TOptional<FWfcTile> newTileData;
+	const FWfcTile* newTile = nullptr;
 	if (IsValid(tileset) && tile.IsSet())
 	{
 		const auto* found = tileset->Tiles.Find(*tile);
 		if (found)
-			newTileData.Emplace(*found);
+			newTile = found;
 	}
 
 	//If existing tile data needs to be replaced (or created), then do so.
-	if (newTileData && (
+	if (newTile && (
 			currentViewMode != Mode ||
 			currentTileset.Get() != tileset ||
-			!currentTile.IsSet() || !currentTileID.IsSet() ||
-			*newTileData != *currentTile || *tile != *currentTileID ||
+			!currentTile || !currentTileID.IsSet() ||
+			*newTile != *currentTile || *tile != *currentTileID ||
 			!currentTileset->FacePrototypes.OrderIndependentCompareEqual(tileset->FacePrototypes) ||
 			(viewMode.IsType<FEditorSceneObject_WfcTileWithMatches>() &&
 				!SetsAreEqual(currentFacesToMatch, FacesToMatchAgainst)) ||
 			currentPermutationToMatch != PermutationToMatchAgainst
 		))
 	{
-		check(newTileData.IsSet());
 		currentTileset = { tileset };
 		currentTileID = *tile;
-		currentTile = *newTileData;
+		currentTile = newTile;
 		currentFacesToMatch = FacesToMatchAgainst;
 		currentPermutationToMatch = PermutationToMatchAgainst;
 
@@ -114,6 +113,14 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 					}
 				);
 			break;
+			case EWfcTilesetEditorMode::Generation:
+				viewMode.Emplace<FEditorSceneObject_WfcGeneration>(
+					*this, *owner,
+					FTransform{ }, SpacingBetweenTiles,
+					tileset, GenerationSettings
+				);
+				NGeneratorTicksToRun = 0;
+			break;
 			
 			default:
 			    check(false);
@@ -124,13 +131,22 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 		currentViewMode = Mode;
 		owner->RedrawRequested(owner->Viewport);
 	}
-	else if (!newTileData)
+	else if (!newTile && !viewMode.IsType<FEditorSceneObject_WfcGeneration>())
 	{
 		currentTileset.Reset();
-		currentTile.Reset();
+		currentTile = nullptr;
 		currentTileID.Reset();
 		currentViewMode.Reset();
 		viewMode.Set<std::nullptr_t>(nullptr);
+	}
+	else if (viewMode.IsType<FEditorSceneObject_WfcGeneration>())
+	{
+		auto& generator = viewMode.Get<FEditorSceneObject_WfcGeneration>();
+		
+		generator.Tick(NGeneratorTicksToRun);
+		NGeneratorTicksToRun = 0;
+		
+		generator.RefreshSettings(GenerationSettings);
 	}
 
 	//TODO: Scale each face's alpha based on camera focus. This requires sending camera data to the editor-object.

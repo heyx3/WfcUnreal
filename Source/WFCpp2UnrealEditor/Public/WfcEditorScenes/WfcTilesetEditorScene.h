@@ -5,10 +5,8 @@
 #include <array>
 #include <cstddef>
 
-#include "EditorSceneObjects.h"
 #include "WfcTileset.h"
-
-#include "WfcTilesetEditorScene.generated.h"
+#include "EditorSceneObjects.h"
 
 
 class UBoxComponent;
@@ -22,6 +20,7 @@ enum class EWfcTilesetEditorMode : uint8
 	Tile,
 	Permutations,
 	Matches,
+	Generation,
 
 	COUNT UMETA(Hidden)
 };
@@ -43,6 +42,9 @@ public:
 	FWFC_Transform3D PermutationToMatchAgainst;
 	TSet<WFC_Directions3D> FacesToMatchAgainst = { WFC_Directions3D::MaxX };
 	
+	FEditorSceneObject_WfcGeneration_Settings GenerationSettings;
+	int NGeneratorTicksToRun = 0; //Consumed on every Refresh() call
+	
     FWfcTilesetEditorScene(ConstructionValues cvs = ConstructionValues());
 
     //Call continuously so that this scene can respond to changes in tile data, camera, etc.
@@ -57,11 +59,12 @@ private:
 	TVariant<std::nullptr_t,
 			 FEditorSceneObject_WfcTile,
 			 FEditorSceneObject_WfcTileWithPermutations,
-			 FEditorSceneObject_WfcTileWithMatches
+			 FEditorSceneObject_WfcTileWithMatches,
+		     FEditorSceneObject_WfcGeneration
 			> viewMode;
 	
 	TWeakObjectPtr<UWfcTileset> currentTileset;
-	TOptional<FWfcTile> currentTile;
+	const FWfcTile* currentTile = nullptr;
 	TOptional<int> currentTileID;
 	TOptional<EWfcTilesetEditorMode> currentViewMode;
 	TSet<WFC_Directions3D> currentFacesToMatch;

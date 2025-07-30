@@ -10,7 +10,7 @@ public class WFCpp2UnrealRuntime : ModuleRules
             new string[]
             {
                 "Core",
-                "WFCpp2"
+                "WFCpp2", "CoreUObject"
             }
         );
         if (Target.bCompileAgainstEditor)

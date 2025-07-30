@@ -123,3 +123,24 @@ void UWfcTileset::Unwrap(Unwrapped& output) const
         }
     }
 }
+
+UWfcTileset* UWfcTilesetGenerator::Generate(UObject* outer, FName name) const
+{
+    auto* tileset = NewObject<UWfcTileset>(outer, name);
+    GenerateToExistingInstance(tileset);
+    return tileset;
+}
+void UWfcTilesetGenerator::GenerateToExistingInstance(UWfcTileset* tileset) const
+{
+    tileset->Tiles.Empty();
+    tileset->FacePrototypes.Empty();
+    GenerateImpl(tileset);
+}
+
+UWfcTileset* FTilesetAssetRef::GetOrMakeTileset() const
+{
+    if (IsValid(Asset))
+        return Asset;
+    else
+        return NewObject<UWfcTilesetGenerator>(Generator)->Generate();
+}

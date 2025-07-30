@@ -7,6 +7,7 @@
 #include "Algo/Count.h"
 
 #include "WfcTileset.h"
+#include "WfcGenerator.h"
 #include "WfcBpUtils.h"
 #include "WFCpp2UnrealEditor.h"
 #include "WfcEditorScenes/WfcTileVisualizer.h"
@@ -36,6 +37,17 @@ namespace
 			face.IsSet() ? MaterialPathsByColor[static_cast<int>(*face)] : MaterialPathGreyscale,
 			nullptr, LOAD_EditorOnly
 		);
+	}
+
+	TStrongObjectPtr<UMaterialInstanceDynamic> CreateTemperatureEditorMaterial(FColor color)
+	{
+		static const TCHAR* const MaterialPath = TEXT("");
+		auto* materialAsset = LoadObject<UMaterialInterface>(nullptr, MaterialPath, nullptr, LOAD_EditorOnly);
+
+		auto* mat = UMaterialInstanceDynamic::Create(materialAsset, GetTransientPackage());
+		//TODO: Set material parameters
+		
+		return TStrongObjectPtr{ mat };
 	}
 }
 
@@ -382,7 +394,7 @@ FEditorSceneObject_WfcTile::FEditorSceneObject_WfcTile(FWfcTilesetEditorScene& o
 		tileDataVisualizer = WfcTileVisualizer::MakeVisualizer({
 			owner, viewportClient,
 			{ tileset }, tileID, permutation,
-			tileset->Tiles[tileID], tr
+			&tileset->Tiles[tileID], tr
 		});
 }
 void FEditorSceneObject_WfcTile::SetTransform(const FTransform& newTr)
@@ -636,9 +648,7 @@ FEditorSceneObject_WfcTileWithMatches::FEditorSceneObject_WfcTileWithMatches(
 								TEXT("%i/%s\n%s"),
 								matchTileID,
 								*FWFC_Transform3D{ matchTilePermutation }.ToString(),
-								IsValid(matchTileData.Data) ?
-								    *matchTileData.Data->GetEditorDescription() :
-								    TEXT("[null]")
+								*matchTileData.Data.Get().Description
 							),
 							settings.LabelsTint.ToFColorSRGB(),
 							EHTA_Center, EVRTA_TextBottom
@@ -673,4 +683,128 @@ FEditorSceneObject_WfcTileWithMatches::FEditorSceneObject_WfcTileWithMatches(
 			(srcFace == WFC::Tiled3D::Directions3D::MinZ ? EVRTA_TextTop : EVRTA_TextBottom)
 		);
 	}
+}
+
+FEditorSceneObject_WfcGeneration::FEditorSceneObject_WfcGeneration(FWfcTilesetEditorScene& owner,
+																   FWfcTilesetEditorViewportClient& _viewportClient,
+															       const FTransform& tr,
+																   double extraSpacingBetweenTiles,
+																   const UWfcTileset* _tileset,
+																   const FEditorSceneObject_WfcGeneration_Settings& _settings)
+    : FEditorSceneObject(&owner),
+	  viewportClient(&_viewportClient), tileset(_tileset),
+	  generatorTr(tr),
+      tileSeparation(extraSpacingBetweenTiles + (_tileset ? _tileset->TileLength : 0.0))
+{
+	RefreshSettings(_settings);
+}
+void FEditorSceneObject_WfcGeneration::RefreshSettings(const FEditorSceneObject_WfcGeneration_Settings& newSettings)
+{
+	if (generator && currentSettings.IsSameGeneratorAs(newSettings))
+	{
+		int catchupTicks = newSettings.ImmediatelyRunIterations - nIterations;
+		currentSettings = newSettings;
+		
+		Tick(catchupTicks);
+	}
+	else if (!generator || currentSettings != newSettings)
+	{
+		currentSettings = newSettings;
+		
+		generator = NewObject<UWfcGenerator>();
+		generator->Start(tileset.Get(), currentSettings.Resolution, currentSettings.Seed,
+					     currentSettings.TemperatureClearGrowthRateT, currentSettings.Fuzziness);
+
+		nIterations = 0;
+		Tick(currentSettings.ImmediatelyRunIterations);
+	}
+}
+void FEditorSceneObject_WfcGeneration::Tick(int n)
+{
+	if (n < 1 || !generator)
+		return;
+
+	//Tick.
+	for (int i = 0; i < n && generator->IsRunning(); ++i)
+	{
+		generator->Tick();
+		nIterations += 1;
+	}
+
+	//Get temperature metadata.
+	float tempMin, tempMax, tempMean, tempMedian;
+	generator->GetTemperatureData(tempMin, tempMax, tempMean, tempMedian);
+	float minInterestingTemperature = FMath::Lerp(
+		tempMin,
+		FMath::Lerp(tempMean, tempMedian, 0.5f),
+		0.5f
+	);
+	
+	//Visualize.
+	setCells.Empty();
+	interestingUnsetCells.Empty();
+	for (int z = 0; z < currentSettings.Resolution.Z; ++z)
+		for (int y = 0; y < currentSettings.Resolution.Y; ++y)
+			for (int x = 0; x < currentSettings.Resolution.X; ++x)
+			{
+				FVector cellIdxF(x, y, z);
+				FBox cellBounds{
+					cellIdxF * tileSeparation,
+					(cellIdxF + 1) * tileSeparation
+				};
+				FTransform cellLocalTr{
+					FQuat::Identity,
+					cellBounds.GetCenter()
+				};
+				FTransform cellWorldTr = WfcppUnrealEditor::ComposeTransforms(
+					cellLocalTr,
+					generatorTr
+				);
+
+				auto [cellData, cellUserData] = generator->GetCellWithPtr({ x, y, z });
+				if (cellData.IsSet)
+				{
+					setCells.Add(
+						{ x, y, z },
+						std::move(FSetCell{
+							cellData.IfSet.TileID,
+							WfcTileVisualizer::MakeVisualizer({
+								*reinterpret_cast<FWfcTilesetEditorScene*>(Owner),
+								*viewportClient,
+								tileset, cellData.IfSet.TileID,
+								cellData.IfSet.TilePermutation,
+								&tileset->Tiles[cellData.IfSet.TileID],
+								cellWorldTr
+							})
+						})
+					);
+				}
+				else if (cellData.Temperature >= minInterestingTemperature)
+				{
+					auto entropyLabel = FString::Printf(
+						TEXT("%i/%i possibilities (%f)"),
+						cellData.IfUnset.NPossibilities,
+						generator->GetNTilePossibilities(),
+						static_cast<float>(cellData.IfUnset.NPossibilities) /
+						    generator->GetNTilePossibilities()
+					);
+					auto entropyTr = WfcppUnrealEditor::ComposeTransforms(
+						FTransform{ FVector{ 0, 0, tileset->TileLength / 4.0 } },
+						cellWorldTr
+					);
+
+					FLinearColor temperatureColor = FLinearColor::LerpUsingHSV(
+						{ 0, 1, 0 },
+						{ 1, 0, 0 },
+						FMath::GetRangePct(minInterestingTemperature, tempMax, cellData.Temperature)
+					);
+					
+					// interestingUnsetCells.Add(
+					// 	{ x, y, z },
+					// 	std::move(FUnsetCell{
+					// 		cellData.Temperature,
+					// 	})
+					// );
+				}
+			}
 }

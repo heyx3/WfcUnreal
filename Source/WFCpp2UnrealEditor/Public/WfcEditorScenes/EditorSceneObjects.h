@@ -8,6 +8,8 @@
 #include "WfcTilesetEditorViewportClient.h"
 #include "WfcTileVisualizer.h"
 
+#include "EditorSceneObjects.generated.h"
+
 
 //A scoped owner of a group of components in a preview/editor scene,
 //    not unlike an Actor in a game scene.
@@ -24,9 +26,6 @@ public:
 
 	FEditorSceneObject& operator=(const FEditorSceneObject&) = delete;
 	FEditorSceneObject& operator=(FEditorSceneObject&&) = delete;
-
-	
-	virtual void Tick(float deltaSeconds) { }
 };
 
 
@@ -49,6 +48,65 @@ struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcPermutations_Settings : publ
 struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcMatches_Settings : public FEditorSceneObject_WfcTile_Settings
 {
 	FLinearColor LabelsTint = { 0.5, 0.5, 0.5, 1 };
+};
+
+USTRUCT()
+struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcGeneration_Settings
+{
+	GENERATED_BODY()
+public:
+	
+	UPROPERTY(EditAnywhere)
+	FIntVector Resolution = { 5, 5, 3 };
+	UPROPERTY(EditAnywhere)
+	int Seed = 12345;
+
+	//If > 0, immediately runs the generator to this step or until it finishes/fails.
+	UPROPERTY(EditAnywhere)
+	int ImmediatelyRunIterations = 0;
+
+	//From 0 to 1, how fast the clear region increases around tiles that have already been cleared a lot.
+	//Use a low value for tilesets that produce many small errors requiring limited clearing.
+	UPROPERTY(EditAnywhere, meta=(UIMin=0, UIMax=1))
+	float TemperatureClearGrowthRateT = 0.1f;
+	
+	//The amount of randomness in which cells get set first.
+	//If set to 0, the algorithm always picks (randomly) from the cells with the fewest number of options.
+	UPROPERTY(EditAnywhere)
+	float Fuzziness = 0.1f;
+
+	UPROPERTY(EditAnywhere, AdvancedDisplay)
+	bool PeriodicX = false;
+	UPROPERTY(EditAnywhere, AdvancedDisplay)
+	bool PeriodicY = false;
+	UPROPERTY(EditAnywhere, AdvancedDisplay)
+	bool PeriodicZ = false;
+
+	
+	//Returns true if the given settings represents the same generator as this one
+	//    but potentially with a different immediate-tick-count.
+	inline bool IsSameGeneratorAs(const FEditorSceneObject_WfcGeneration_Settings& other) const
+	{
+		return Resolution == other.Resolution && Seed == other.Seed &&
+			   TemperatureClearGrowthRateT == other.TemperatureClearGrowthRateT &&
+			   Fuzziness == other.Fuzziness &&
+			   PeriodicX == other.PeriodicX &&
+			   PeriodicY == other.PeriodicY &&
+			   PeriodicZ == other.PeriodicZ;
+	}
+};
+inline bool operator==(const FEditorSceneObject_WfcGeneration_Settings& a, const FEditorSceneObject_WfcGeneration_Settings& b)
+{
+	return a.IsSameGeneratorAs(b) && a.ImmediatelyRunIterations == b.ImmediatelyRunIterations;
+}
+template<> struct TStructOpsTypeTraits<FEditorSceneObject_WfcGeneration_Settings> : public TStructOpsTypeTraitsBase2<FEditorSceneObject_WfcGeneration_Settings>
+{
+	enum
+	{
+		WithZeroConstructor = true,
+		WithNoDestructor = true,
+		WithIdenticalViaEquality = true
+	};
 };
 
 
@@ -186,4 +244,51 @@ private:
 		FEditorTextComponent Label;
 	};
 	TArray<Match> matches;
+};
+
+struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcGeneration : public FEditorSceneObject
+{
+public:
+
+	FEditorSceneObject_WfcGeneration(FWfcTilesetEditorScene& owner, FWfcTilesetEditorViewportClient& viewportClient,
+									 const FTransform& tr, double extraSpacingBetweenTiles,
+									 const UWfcTileset* tileset,
+									 const FEditorSceneObject_WfcGeneration_Settings& settings);
+
+	//Remakes this instance to match the given settings.
+	//Attempts to optimize the operation if the change is small
+	//    (e.x. if you only increased ImmediatelyRunIterations we'll just run Tick that many times).
+	void RefreshSettings(const FEditorSceneObject_WfcGeneration_Settings& newSettings);
+	//Runs N updates of the generator (or until completion), then updates visualizations accordingly.
+	//For convenience, does nothing when n < 1.
+	void Tick(int n = 1);
+	
+	const class UWfcGenerator* GetGenerator() const { return generator; }
+
+private:
+
+	FWfcTilesetEditorViewportClient* viewportClient;
+	TWeakObjectPtr<const UWfcTileset> tileset;
+	TObjectPtr<class UWfcGenerator> generator;
+
+	FTransform generatorTr;
+	FEditorSceneObject_WfcGeneration_Settings currentSettings;
+	double tileSeparation;
+
+	int nIterations = 0;
+	
+	struct FSetCell
+	{
+		WfcTileID TileID;
+		TUniquePtr<WfcTileVisualizer> Viz;
+	};
+	TMap<FIntVector3, FSetCell> setCells;
+	
+	struct FUnsetCell
+	{
+		float Temperature;
+		FEditorMeshComponent TemperatureViz;
+		FEditorTextComponent EntropyViz;
+	};
+	TMap<FIntVector3, FUnsetCell> interestingUnsetCells;
 };

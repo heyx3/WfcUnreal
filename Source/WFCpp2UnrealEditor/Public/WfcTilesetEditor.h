@@ -67,6 +67,8 @@ private:
 	TSharedPtr<IDetailsView> detailsView;
     TSharedPtr<STextComboBox> tileSelector;
 	TSharedPtr<IStructureDetailsView> editorForPermutationToMatch;
+	TSharedPtr<IStructureDetailsView> editorForGeneratorSettings;
+	int nTicksPerClick = 1;
     
     TSharedPtr<struct FWfcTilesetEditorSceneViewTab> tileSceneTabFactory;
     TSharedPtr<class SWfcTilesetTabBody> tileSceneTabBody;
