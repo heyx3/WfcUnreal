@@ -25,7 +25,7 @@ public:
 	FWFC_Transform3D TilePermutation;
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
-	UWfcTileGameData* TileGameData = nullptr;
+	TInstancedStruct<FWfcGameData> TileGameData = TInstancedStruct<FWfcGameData>::Make();
 };
 
 //Info about a cell in WFC generation that has not been set yet.

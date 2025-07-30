@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Containers/StaticArray.h"
+#include "StructUtils/InstancedStruct.h"
 
 #include "WfcFacePrototype.h"
 #include "WfcDataReflection.h"
@@ -77,10 +78,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ClampMin=0, ClampMax=4294967295))
 	int WeightU32 = 100;
 
-	//An asset associated with this tile.
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	UWfcTileGameData* Data = nullptr;
-	//If not empty, this name overrides the automatically-computed nickname.
+	//Custom data associated with this tile.
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, meta=(ExcludeBaseStruct))
+	TInstancedStruct<FWfcGameData> Data;
+	//Overrides the description normally taken from 'Data'. 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	FString NicknameOverride;
 
@@ -97,8 +98,8 @@ public:
     {
     	if (!NicknameOverride.IsEmpty())
     		return NicknameOverride;
-    	else if (IsValid(Data))
-    		return Data->GetEditorDescription();
+    	else if (WFCPP2_TILE_DATA_GENERATE_DESCRIPTION)
+    		return Data.Get().Description;
     	else
     		return TEXT("[null]");
     }
@@ -124,16 +125,17 @@ public:
 
 	//Creates a POD tuple of this struct's trivially-copyable fields, for hashing and equality.
 	auto GetPODFields() const { return MakeTuple(
-		MinX, MaxX, MinY, MaxY, MinZ, MaxZ, WeightU32, Data, ImplicitPermutations.Unwrap().GetExplicit().Bits()
+		MinX, MaxX, MinY, MaxY, MinZ, MaxZ, WeightU32, ImplicitPermutations.Unwrap().GetExplicit().Bits()
 	); }
 	//Creates a tuple of pointers to this struct's non-trivially-copyable fields, for hashing and equality.
 	auto GetSpecialFields() const { return MakeTuple(
-		&PrecisePermutations
+		&PrecisePermutations, &Data
 	); }
 	bool operator==(const FWfcTile& t2) const
 	{
 		return GetPODFields() == t2.GetPODFields() &&
-			   PrecisePermutations == t2.PrecisePermutations;
+			   PrecisePermutations == t2.PrecisePermutations &&
+			   Data == t2.Data;
 	}
 };
 template<>
@@ -155,7 +157,10 @@ inline uint32 GetTypeHash(const FWfcTile& t)
 	for (auto p : precisePermutations)
 		u = GetTypeHash(MakeTuple(u, p));
 
-	static_assert(TTupleArity<decltype(f)>::Value == 1,
+	const auto* data = f.Get<1>();
+	u = GetTypeHash(MakeTuple(u, data->GetScriptStruct(), data->Get()));
+
+	static_assert(TTupleArity<decltype(f)>::Value == 2,
 				  "Some 'special' fields were added or removed!");
 
 	return u;

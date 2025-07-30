@@ -70,7 +70,7 @@ FWfcCellStatus UWfcGenerator::GetCell(const FIntVector& cellPos, bool copyInData
 				static_cast<WFC_Rotations3D>(cell.ChosenPermutation.Rot),
 				cell.ChosenPermutation.Invert
 			},
-			tileset->Tiles[tileID].Data
+			copyInData ? tileset->Tiles[tileID].Data : TInstancedStruct<FWfcGameData>::Make()
 		} };
 	}
 	else
@@ -78,6 +78,62 @@ FWfcCellStatus UWfcGenerator::GetCell(const FIntVector& cellPos, bool copyInData
 		return { temperature, false, { cell.NPossibilities }, { } };
 	}
 }
+TTuple<FWfcCellStatus, const TInstancedStruct<FWfcGameData>*> UWfcGenerator::GetCellWithPtr(const FIntVector& cellPos)
+{
+	if (GetStatus() == WfcSimState::Off)
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("UWfcGenerator::GetCell(): Simulation hasn't started yet!"));
+		return { FWfcCellStatus{ }, nullptr };
+	}
+	verify(state.IsSet());
+	const auto& wfc = state.GetValue();
+
+	WFC::Vector3i wfcPos(cellPos.X, cellPos.Y, cellPos.Z);
+	WFC::Region3i wfcBounds(wfc.Grid.Cells.GetDimensions());
+
+	if (!wfcBounds.Contains(wfcPos))
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("Given out-of-range grid pos: %i,%i,%i / %i,%i,%i"),
+				wfcPos.x, wfcPos.y, wfcPos.z,
+				wfcBounds.MaxExclusive.x, wfcBounds.MaxExclusive.y, wfcBounds.MaxExclusive.z);
+
+		return { FWfcCellStatus{ -1, false, { }, { } }, nullptr };
+	}
+
+	float temperature = wfc.GetTemperature(wfcPos);
+	
+	const auto& cell = wfc.Grid.Cells[wfcPos];
+	if (cell.IsSet())
+	{
+		auto tileID = wfcLibraryData.WfcTileIDs[cell.ChosenTile];
+		return {
+			FWfcCellStatus{
+				temperature, true, { },
+				{
+					tileID,
+					{
+						static_cast<WFC_Rotations3D>(cell.ChosenPermutation.Rot),
+						cell.ChosenPermutation.Invert
+					},
+					TInstancedStruct<FWfcGameData>::Make()
+				}
+			},
+			&tileset->Tiles[tileID].Data
+		};
+	}
+	else
+	{
+		return {
+			FWfcCellStatus{
+				temperature, false,
+				{ cell.NPossibilities },
+				{ }
+			},
+			nullptr
+		};
+	}
+}
+
 void UWfcGenerator::SetCell(const FIntVector& cell, int32 unrealTileID, FWFC_Transform3D permutation, bool persistent)
 {
 	if (!state.IsSet())

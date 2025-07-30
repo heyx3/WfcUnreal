@@ -15,8 +15,8 @@ struct FWfcTileVisualizerInputs
 
 	const int32 TileIdx;
 	const FWFC_Transform3D Permutation;
-	const TOptional<FWfcTile> Tile;
-	const UWfcTileGameData* GetTileGameData() const { return (Tile.IsSet() ? Tile->Data : nullptr); }
+	const FWfcTile* Tile = nullptr;
+	const TInstancedStruct<FWfcGameData>* GetTileGameData() const { return Tile ? &Tile->Data : nullptr; }
 
 	//This transform is assumed to already incorporate the permutation (`Permutation.ToFTransform()`).
 	FTransform TileTr;

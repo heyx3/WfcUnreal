@@ -5,23 +5,79 @@
 #include "WfcTileData.generated.h"
 
 
-//Managed data associated with a tile, for example the static mesh or Actor it represents.
-//This data is represented in editor by a corresponding FWfcTileVisualizerBase.
-UCLASS(BlueprintType, Blueprintable, Abstract)
-class WFCPP2UNREALRUNTIME_API UWfcTileGameData : public UDataAsset
+//By default, to avoid excessive heap usage,
+//    a tile's GameData does not generate a Description in shipping builds.
+//You may change this at the plugin level.
+#ifndef WFCPP2_TILE_DATA_GENERATE_DESCRIPTION
+    #if UE_BUILD_SHIPPING || defined(__INTELLISENSE__) || defined(__RESHARPER__)
+        #define WFCPP2_TILE_DATA_GENERATE_DESCRIPTION 1
+    #else
+        #define WFCPP2_TILE_DATA_GENERATE_DESCRIPTION 0
+    #endif
+#endif
+
+
+
+//An Instanced Struct; the base type for data associated with a WFC tile.
+//This base type can represent "null".
+//
+//For more info on instanced structs,
+//    see https://github.com/mattyman174/GenericItemization?tab=readme-ov-file#instanced-structs
+USTRUCT(BlueprintType)
+struct WFCPP2UNREALRUNTIME_API FWfcGameData
 {
     GENERATED_BODY()
 public:
 
-    UFUNCTION(BlueprintCallable, BlueprintPure, BlueprintNativeEvent)
-    FString GetEditorDescription() const;
+    //A short, human-readable description of this data.
+    //Automatically regenerated after editing, by calling the virtual function 'GenerateDescription()'.
+    //
+    //**IMPORTANT NOTE**: By default, descriptions are not generated in release builds!
+    //This can be reconfigured in this plugin's C# build file.
+    //
+    //'GenerateDescription()' can only be implemented in C++, so Blueprint child structs can't control it.
+    UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Transient)
+    FString Description;
+
+    
+    virtual ~FWfcGameData() { }
+    virtual FString GenerateDescription() const { return TEXT("[no description]"); }
+
+    #if WFCPP2_TILE_DATA_GENERATE_DESCRIPTION
+        void PostSerialize(const FArchive& ar)
+        {
+            if (ar.IsLoading())
+                Description = GenerateDescription();
+        }
+        void PostScriptConstruct()
+        {
+            Description = GenerateDescription();
+        }
+    #endif
+
+    //Assume the other instance is the same child type as this one.
+    bool operator==(const FWfcGameData& other) const { return Compare(other); }
+    virtual uint32 Hash() const { return 1; }
+
+protected:
+    virtual bool Compare(const FWfcGameData& other) const    PURE_VIRTUAL(FWfcGameData::Compare, return false; )
 };
-inline FString UWfcTileGameData::GetEditorDescription_Implementation() const { return GetName(); }
+template<>
+struct TStructOpsTypeTraits<FWfcGameData> : public TStructOpsTypeTraitsBase2<FWfcGameData>
+{
+    enum
+    {
+        WithPostSerialize = WFCPP2_TILE_DATA_GENERATE_DESCRIPTION,
+        WithPostScriptConstruct = WFCPP2_TILE_DATA_GENERATE_DESCRIPTION,
+        WithIdenticalViaEquality = true
+    };
+};
+inline uint32 GetTypeHash(const FWfcGameData& d) { return d.Hash(); }
 
 
 //Associates a WFC tile with a static mesh asset.
-UCLASS()
-class WFCPP2UNREALRUNTIME_API UWfcTileGameData_StaticMesh : public UWfcTileGameData
+USTRUCT(BlueprintType)
+struct WFCPP2UNREALRUNTIME_API FWfcGameData_StaticMesh : public FWfcGameData
 {
     GENERATED_BODY()
 public:
@@ -29,22 +85,27 @@ public:
     UPROPERTY(BlueprintReadWrite, EditAnywhere)
     UStaticMesh* Mesh = nullptr;
 
-    virtual FString GetEditorDescription_Implementation() const override { return IsValid(Mesh) ? Mesh->GetName() : FString(TEXT("[null]")); }
+    virtual FString GenerateDescription() const override { return IsValid(Mesh) ? Mesh->GetName() : Super::GenerateDescription(); }
+    virtual bool Compare(const FWfcGameData& other) const override { return Mesh == reinterpret_cast<const FWfcGameData_StaticMesh&>(other).Mesh; }
+    virtual uint32 Hash() const override { return GetTypeHash(Mesh); }
 };
+template<> struct TStructOpsTypeTraits<FWfcGameData_StaticMesh> : public TStructOpsTypeTraits<FWfcGameData> { };
 
 //Associates a WFC tile with an actor.
 //Consider having that actor check whether it's in an editor preview scene before running any logic!
-UCLASS()
-class WFCPP2UNREALRUNTIME_API UWfcTileGameData_Actor : public UWfcTileGameData
+USTRUCT(BlueprintType)
+struct WFCPP2UNREALRUNTIME_API FWfcGameData_Actor : public FWfcGameData
 {
     GENERATED_BODY()
 public:
 
     UPROPERTY(BlueprintReadWrite, EditAnywhere)
     TSubclassOf<AActor> ActorType = nullptr;
-
     //Guaranteed to be non-null, by defaulting to AActor.
     TSubclassOf<AActor> SanitizedActorType() const { return IsValid(ActorType) ? ActorType : TSubclassOf<AActor>{ AActor::StaticClass() }; }
 
-    virtual FString GetEditorDescription_Implementation() const override { return SanitizedActorType()->GetName(); }
+    virtual FString GenerateDescription() const override { return SanitizedActorType()->GetName(); }
+    virtual bool Compare(const FWfcGameData& other) const override { return ActorType == reinterpret_cast<const FWfcGameData_Actor&>(other).ActorType; }
+    virtual uint32 Hash() const override { return GetTypeHash(ActorType); }
 };
+template<> struct TStructOpsTypeTraits<FWfcGameData_Actor> : public TStructOpsTypeTraits<FWfcGameData> { };

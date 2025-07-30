@@ -40,7 +40,7 @@ namespace WfcTileVisualizerStaticMesh
 	static bool IsApplicable(const FWfcTileVisualizerInputs& inputs)
 	{
 		auto* data = inputs.GetTileGameData();
-		return (IsValid(data) && data->IsA<UWfcTileGameData_StaticMesh>());
+		return (data && data->GetScriptStruct() == FWfcGameData_StaticMesh::StaticStruct());
 	}
 	static TUniquePtr<WfcTileVisualizer> MakeViz(const FWfcTileVisualizerInputs& inputs)
 	{
@@ -52,7 +52,7 @@ namespace WfcTileVisualizerStaticMesh
 WfcTileVisualizer_StaticMesh::WfcTileVisualizer_StaticMesh(const FWfcTileVisualizerInputs& inputs)
 	: WfcTileVisualizer(inputs),
       meshComponent(&inputs.EditorScene,
-				    CastChecked<UWfcTileGameData_StaticMesh>(inputs.GetTileGameData())->Mesh,
+      				reinterpret_cast<const FWfcGameData_StaticMesh&>(inputs.GetTileGameData()->Get()).Mesh,
 				    inputs.TileTr)
 {
 	

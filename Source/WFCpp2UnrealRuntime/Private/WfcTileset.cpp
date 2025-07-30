@@ -1,7 +1,7 @@
 ﻿#include "WfcTileset.h"
 
 
-int UWfcTileset::GetTileIDForData(UWfcTileGameData* targetData, bool& foundTile) const
+int UWfcTileset::GetTileIDForData(const TInstancedStruct<FWfcGameData>& targetData, bool& foundTile) const
 {
     for (const auto& kvp : Tiles)
     {
@@ -16,7 +16,7 @@ int UWfcTileset::GetTileIDForData(UWfcTileGameData* targetData, bool& foundTile)
     return 0; //Technically this value is UB anyway, but in practice I've been using 0 as the null ID
               //    so this is a good default value.
 }
-TOptional<int> UWfcTileset::GetTileIDForData(UWfcTileGameData* targetData) const
+TOptional<int> UWfcTileset::GetTileIDForData(const TInstancedStruct<FWfcGameData>& targetData) const
 {
     bool found;
     int id = GetTileIDForData(targetData, found);

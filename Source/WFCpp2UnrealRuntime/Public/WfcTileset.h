@@ -33,9 +33,9 @@ public:
 
 	//Grabs the ID of the first tile containing the given data reference.
 	UFUNCTION(BlueprintCallable)
-	int GetTileIDForData(UWfcTileGameData* targetData, bool& foundTile) const;
+	int GetTileIDForData(const TInstancedStruct<FWfcGameData>& targetData, bool& foundTile) const;
 	//Grabs the ID of the first tile containing the given data reference.
-	TOptional<int> GetTileIDForData(UWfcTileGameData* targetData) const;
+	TOptional<int> GetTileIDForData(const TInstancedStruct<FWfcGameData>& targetData) const;
 
 	//Grabs the ID of the face prototype containing the given nickname.
 	UFUNCTION(BlueprintCallable)
