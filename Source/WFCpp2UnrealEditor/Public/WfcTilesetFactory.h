@@ -16,6 +16,9 @@ class WFCPP2UNREALEDITOR_API UWfcTilesetFactory : public UFactory
     GENERATED_BODY()
 public:
 
+    UPROPERTY(BlueprintReadWrite, EditAnywhere, Category="WFC Tileset Factory")
+    TSubclassOf<UWfcTilesetGenerator> Generator;
+
     //Define the features of this factory:
     UWfcTilesetFactory()
     {
@@ -32,6 +35,14 @@ public:
     // [top of WfcTileset.cpp] #include "AssetTypeCategories.h"
     // [inside WfcTileset.cpp] UWfcTilesetFactory::GetMenuCategories() const { return EAssetTypeCategories::Blueprint; }
 
+    virtual bool ConfigureProperties() override;
     virtual UObject* FactoryCreateNew(UClass* InClass, UObject* InParent, FName InName,
                                       EObjectFlags Flags, UObject* Context, FFeedbackContext* Warn) override;
+
+private:
+    
+    TSharedPtr<FUICommandList> dialogCommandList;
+
+    UFUNCTION()
+    void OnGeneratorSelectedInWindow(TSubclassOf<UWfcTilesetGenerator> newGenerator) { Generator = newGenerator; }
 };

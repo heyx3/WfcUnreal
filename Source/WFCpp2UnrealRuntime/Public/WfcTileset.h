@@ -84,3 +84,39 @@ public:
 	
 	#endif
 };
+
+//Generates a tileset procedurally.
+//Sometimes this is more convenient than hand-editing it.
+UCLASS(BlueprintType, Blueprintable, Abstract)
+class WFCPP2UNREALRUNTIME_API UWfcTilesetGenerator : public UObject
+{
+	GENERATED_BODY()
+public:
+
+	UFUNCTION(BlueprintCallable)
+	UWfcTileset* Generate(UObject* outer = nullptr, FName name = NAME_None) const;
+	UFUNCTION(BlueprintCallable)
+	void GenerateToExistingInstance(UWfcTileset* tileset) const;
+
+protected:
+	//Generates the tileset into the given empty instance.
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent)
+	void GenerateImpl(UWfcTileset* output) const;
+};
+inline void UWfcTilesetGenerator::GenerateImpl_Implementation(UWfcTileset* output) const
+	PURE_VIRTUAL(UWfcTilesetFactory::GenerateImpl_Implementation, )
+
+//Either a static tileset or a procedurally-generated one.
+USTRUCT(BlueprintType)
+struct WFCPP2UNREALRUNTIME_API FTilesetAssetRef
+{
+	GENERATED_BODY()
+public:
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditCondition="!Generator"))
+	UWfcTileset* Asset = nullptr;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, meta=(EditCondition="!IsValid(Asset)"))
+	TSubclassOf<UWfcTilesetGenerator> Generator;
+
+	UWfcTileset* GetOrMakeTileset() const;
+};

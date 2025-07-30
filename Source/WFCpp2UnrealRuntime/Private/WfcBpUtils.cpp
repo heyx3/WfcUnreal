@@ -1,5 +1,8 @@
 ﻿#include "WfcBpUtils.h"
 
+#include "WfcTileset.h"
+
+
 FRotator UWfcUtils::WfcToFRotator(WFC_Directions3D face)
 {
 	switch (face)
@@ -12,4 +15,9 @@ FRotator UWfcUtils::WfcToFRotator(WFC_Directions3D face)
 		case WFC_Directions3D::MaxZ: return { 90, 0, 0 };
 		default: check(false); return { 0, 0, 0 };
 	}
+}
+
+UWfcTileset* UWfcUtils::GetOrMakeTileset(const FTilesetAssetRef& ref)
+{
+	return ref.GetOrMakeTileset();
 }

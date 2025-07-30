@@ -50,4 +50,7 @@ public:
 	//The first valid face prototype ID. All subsequent values are also valid ID's.
 	UFUNCTION(BlueprintCallable, BlueprintPure, meta=(CompactNodeTitle="First face ID"))
 	static int FaceIDFirstValid() { return (int)FIRST_VALID_FACE_ID; }
+
+	UFUNCTION(BlueprintCallable)
+	static UWfcTileset* GetOrMakeTileset(const FTilesetAssetRef& ref);
 };
