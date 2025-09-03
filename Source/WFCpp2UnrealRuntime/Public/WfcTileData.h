@@ -38,7 +38,6 @@ public:
     //'GenerateDescription()' can only be implemented in C++, so Blueprint child structs can't control it.
     UPROPERTY(BlueprintReadOnly, VisibleAnywhere, Transient)
     FString Description;
-
     
     virtual ~FWfcGameData() { }
     virtual FString GenerateDescription() const { return TEXT("[no description]"); }
@@ -54,14 +53,19 @@ public:
             Description = GenerateDescription();
         }
     #endif
-
+    
+    
     //Assume the other instance is the same child type as this one.
     bool operator==(const FWfcGameData& other) const { return Compare(other); }
     virtual uint32 Hash() const { return 1; }
+    bool Identical(const FWfcGameData* other, uint32 flags) const { return Compare(*other); }
 
 protected:
     virtual bool Compare(const FWfcGameData& other) const    PURE_VIRTUAL(FWfcGameData::Compare, return false; )
+
+private:
 };
+inline uint32 GetTypeHash(const FWfcGameData& d) { return d.Hash(); }
 template<>
 struct TStructOpsTypeTraits<FWfcGameData> : public TStructOpsTypeTraitsBase2<FWfcGameData>
 {
@@ -69,11 +73,11 @@ struct TStructOpsTypeTraits<FWfcGameData> : public TStructOpsTypeTraitsBase2<FWf
     {
         WithPostSerialize = WFCPP2_TILE_DATA_GENERATE_DESCRIPTION,
         WithPostScriptConstruct = WFCPP2_TILE_DATA_GENERATE_DESCRIPTION,
-        WithIdenticalViaEquality = true
+        WithIdentical = true //NOTE: if using IdenticalViaEquality, then Unreal's polymorphic wrapper can't compare them :(
     };
 };
-inline uint32 GetTypeHash(const FWfcGameData& d) { return d.Hash(); }
-
+#define WFCPP_UNREAL_TILE_GAME_DATA_TYPE_TRAITS(className) \
+    template<> struct TStructOpsTypeTraits<className> : public TStructOpsTypeTraits<className::Super> { }
 
 //Associates a WFC tile with a static mesh asset.
 USTRUCT(BlueprintType)

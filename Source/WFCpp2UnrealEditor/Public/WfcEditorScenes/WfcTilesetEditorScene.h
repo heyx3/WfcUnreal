@@ -64,7 +64,7 @@ private:
 			> viewMode;
 	
 	TWeakObjectPtr<UWfcTileset> currentTileset;
-	const FWfcTile* currentTile = nullptr;
+	TOptional<FWfcTile> currentTile;
 	TOptional<int> currentTileID;
 	TOptional<EWfcTilesetEditorMode> currentViewMode;
 	TSet<WFC_Directions3D> currentFacesToMatch;

@@ -58,7 +58,7 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 	{
 		currentTileset = { tileset };
 		currentTileID = *tile;
-		currentTile = newTile;
+		currentTile = *newTile;
 		currentFacesToMatch = FacesToMatchAgainst;
 		currentPermutationToMatch = PermutationToMatchAgainst;
 
@@ -134,7 +134,7 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 	else if (!newTile && !viewMode.IsType<FEditorSceneObject_WfcGeneration>())
 	{
 		currentTileset.Reset();
-		currentTile = nullptr;
+		currentTile.Reset();
 		currentTileID.Reset();
 		currentViewMode.Reset();
 		viewMode.Set<std::nullptr_t>(nullptr);
