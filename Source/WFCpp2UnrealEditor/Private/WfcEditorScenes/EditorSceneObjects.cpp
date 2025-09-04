@@ -694,8 +694,14 @@ FEditorSceneObject_WfcGeneration::FEditorSceneObject_WfcGeneration(FWfcTilesetEd
     : FEditorSceneObject(&owner),
 	  viewportClient(&_viewportClient), tileset(_tileset),
 	  generatorTr(tr),
-      tileSeparation(extraSpacingBetweenTiles + (_tileset ? _tileset->TileLength : 0.0))
+      tileSeparation(extraSpacingBetweenTiles + (_tileset ? _tileset->TileLength : 0.0)),
+      areaBox(&owner,
+      	      FBox{ tr.GetLocation() - ((tr.GetScale3D() * FVector{ _settings.Resolution } * tileSeparation) / 2.0f),
+      			    tr.GetLocation() + ((tr.GetScale3D() * FVector{ _settings.Resolution } * tileSeparation) / 2.0f) },
+      	      tr.Rotator(),
+      	      FLinearColor{ 0, 0, 0, 1 }.ToFColorSRGB())
 {
+	areaBox.GetComponent()->SetLineThickness(20.0);
 	RefreshSettings(_settings);
 }
 void FEditorSceneObject_WfcGeneration::RefreshSettings(const FEditorSceneObject_WfcGeneration_Settings& newSettings)
@@ -742,7 +748,9 @@ void FEditorSceneObject_WfcGeneration::Tick(int n)
 	
 	//Visualize.
 	setCells.Empty();
-	interestingUnsetCells.Empty();
+	unsetCells.Empty();
+	auto areaWorldSize = generatorTr.GetScale3D() * FVector{ currentSettings.Resolution } *
+						   tileSeparation;
 	for (int z = 0; z < currentSettings.Resolution.Z; ++z)
 		for (int y = 0; y < currentSettings.Resolution.Y; ++y)
 			for (int x = 0; x < currentSettings.Resolution.X; ++x)
@@ -758,6 +766,10 @@ void FEditorSceneObject_WfcGeneration::Tick(int n)
 				};
 				FTransform cellWorldTr = WfcppUnrealEditor::ComposeTransforms(
 					cellLocalTr,
+					//Center the tile grid at the origin.
+					FTransform{
+						-areaWorldSize / 2.0f
+					},
 					generatorTr
 				);
 
@@ -774,12 +786,15 @@ void FEditorSceneObject_WfcGeneration::Tick(int n)
 								tileset, cellData.IfSet.TileID,
 								cellData.IfSet.TilePermutation,
 								&tileset->Tiles[cellData.IfSet.TileID],
-								cellWorldTr
+								WfcppUnrealEditor::ComposeTransforms(
+									cellData.IfSet.TilePermutation.ToFTransform(),
+									cellWorldTr
+								)
 							})
 						})
 					);
 				}
-				else if (cellData.Temperature >= minInterestingTemperature)
+				else if (minInterestingTemperature > 0 && cellData.Temperature >= minInterestingTemperature)
 				{
 					auto entropyLabel = FString::Printf(
 						TEXT("%i/%i possibilities (%f)"),
@@ -799,12 +814,31 @@ void FEditorSceneObject_WfcGeneration::Tick(int n)
 						FMath::GetRangePct(minInterestingTemperature, tempMax, cellData.Temperature)
 					);
 					
-					// interestingUnsetCells.Add(
+					// unsetCells.Add(
 					// 	{ x, y, z },
 					// 	std::move(FUnsetCell{
 					// 		cellData.Temperature,
 					// 	})
 					// );
+				}
+				else
+				{
+					unsetCells.Add(
+					    { x, y, z },
+					    std::move(FUnsetCell{
+					    	cellData.Temperature,
+					    	NullOpt, NullOpt,
+					    	FEditorWireSphereComponent{
+					    		Owner,
+					    		WfcppUnrealEditor::ComposeTransforms(
+					    			FTransform{ FQuat::Identity, FVector::ZeroVector,
+					    						FVector::OneVector * tileSeparation / 18.0f },
+					    			cellWorldTr
+					    		),
+					    		FLinearColor{ 0.8f, 0.6f, 0.3f }.ToFColorSRGB()
+					    	}
+					    })
+					);
 				}
 			}
 }

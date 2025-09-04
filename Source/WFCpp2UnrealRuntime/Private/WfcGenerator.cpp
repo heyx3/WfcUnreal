@@ -172,9 +172,9 @@ void UWfcGenerator::SetFace(const FIntVector& cell, WFC_Directions3D face,
 		UE_LOG(LogWFCpp, Error, TEXT("Cell index is out of range: %i,%i,%i"), cell.X, cell.Y, cell.Z);
 		return;
 	}
-	if (facePrototypeId < 0 || facePrototypeId >= tileset->FacePrototypes.Num())
+	if (!tileset->FacePrototypes.Contains(facePrototypeId))
 	{
-		UE_LOG(LogWFCpp, Error, TEXT("Face prototype index is invalid: %i/%i"), facePrototypeId, tileset->FacePrototypes.Num());
+		UE_LOG(LogWFCpp, Error, TEXT("Face prototype index is invalid: %i"), facePrototypeId);
 		return;
 	}
 
@@ -197,9 +197,9 @@ void UWfcGenerator::SetFaceNot(const FIntVector& cell, WFC_Directions3D face,
 		UE_LOG(LogWFCpp, Error, TEXT("Cell index is out of range: %i,%i,%i"), cell.X, cell.Y, cell.Z);
 		return;
 	}
-	if (facePrototypeId < 0 || facePrototypeId >= tileset->FacePrototypes.Num())
+	if (!tileset->FacePrototypes.Contains(facePrototypeId))
 	{
-		UE_LOG(LogWFCpp, Error, TEXT("Face prototype index is invalid: %i/%i"), facePrototypeId, tileset->FacePrototypes.Num());
+		UE_LOG(LogWFCpp, Error, TEXT("Face prototype index is invalid: %i"), facePrototypeId);
 		return;
 	}
 	check(state.IsSet());

@@ -45,10 +45,12 @@ public class WFCpp2 : ModuleRules
 			    UnrealTargetConfiguration.DebugGame
 		    }.Contains(target.Configuration))
 		{
-			PublicDefinitions.Add("WFCPP_CHECK_MEMORY=1");
+			//PublicDefinitions.Add("WFCPP_CHECK_MEMORY=1");
 			PublicDefinitions.Add("WFCPP_DEBUG=1");
 		}
 		PublicDefinitions.Add("WFC_API=WFCPP2_API");
+		//Always keep memory checks off unless we're debugging them; they're way too slow.
+		PublicDefinitions.Add("WFCPP_CHECK_MEMORY=0");
 		//Warnings:
 		bWarningsAsErrors = false;
 	}

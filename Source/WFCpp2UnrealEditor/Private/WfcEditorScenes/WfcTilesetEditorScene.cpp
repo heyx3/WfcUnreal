@@ -44,8 +44,20 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 			newTile = found;
 	}
 
-	//If existing tile data needs to be replaced (or created), then do so.
-	if (newTile && (
+	//Update our state based on the refreshed tileset/selected tile/changes to public fields.
+	if (tileset && Mode == EWfcTilesetEditorMode::Generation && currentViewMode != Mode)
+	{
+		viewMode.Emplace<FEditorSceneObject_WfcGeneration>(
+			*this, *owner,
+			FTransform{ }, SpacingBetweenTiles,
+			tileset, GenerationSettings
+		);
+		currentViewMode = Mode;
+		
+		NGeneratorTicksToRun = 0;
+		owner->RedrawRequested(owner->Viewport);	
+	}
+	else if (newTile && (
 			currentViewMode != Mode ||
 			currentTileset.Get() != tileset ||
 			!currentTile || !currentTileID.IsSet() ||
@@ -138,15 +150,19 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 		currentTileID.Reset();
 		currentViewMode.Reset();
 		viewMode.Set<std::nullptr_t>(nullptr);
+		
+		owner->RedrawRequested(owner->Viewport);	
 	}
 	else if (viewMode.IsType<FEditorSceneObject_WfcGeneration>())
 	{
 		auto& generator = viewMode.Get<FEditorSceneObject_WfcGeneration>();
 		
 		generator.Tick(NGeneratorTicksToRun);
+		generator.RefreshSettings(GenerationSettings);
+		
 		NGeneratorTicksToRun = 0;
 		
-		generator.RefreshSettings(GenerationSettings);
+		owner->RedrawRequested(owner->Viewport);	
 	}
 
 	//TODO: Scale each face's alpha based on camera focus. This requires sending camera data to the editor-object.

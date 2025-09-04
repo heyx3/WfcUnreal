@@ -287,8 +287,11 @@ private:
 	struct FUnsetCell
 	{
 		float Temperature;
-		FEditorMeshComponent TemperatureViz;
-		FEditorTextComponent EntropyViz;
+		TOptional<FEditorMeshComponent> TemperatureViz;
+		TOptional<FEditorTextComponent> EntropyViz;
+		TOptional<FEditorWireSphereComponent> BoringViz;
 	};
-	TMap<FIntVector3, FUnsetCell> interestingUnsetCells;
+	TMap<FIntVector3, FUnsetCell> unsetCells;
+
+	FEditorWireBoxComponent areaBox;
 };

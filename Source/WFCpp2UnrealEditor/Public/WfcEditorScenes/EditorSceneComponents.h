@@ -76,7 +76,7 @@ struct WFCPP2UNREALEDITOR_API FEditorWireSphereComponent : public TEditorSceneCo
 	FEditorWireSphereComponent(FPreviewScene* owner, const FTransform& transform,
 				   		       const FColor& color);
 };
-//The box's unrotated extents are equal to its local scale.
+//The box is centered at the origin, and its extents are equal to its local scale.
 struct WFCPP2UNREALEDITOR_API FEditorWireBoxComponent : public TEditorSceneComponent<class UBoxComponent>
 {
 	FEditorWireBoxComponent(FPreviewScene* owner, const FTransform& transform,
