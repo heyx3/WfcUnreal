@@ -129,24 +129,81 @@ public:
 	           bool periodicZ = false);
 
 	//Explicitly sets the given grid cell.
+	//
+	//If 'isPermanentConstraint' is true, this cannot be undone.
 	//You must call 'Start' before this!
 	//
-	//  'persistent' : if true, the generator is not allowed to clear this tile from this cell. 
+	//You may call this in the middle of generation rather than at the beginning,
+	//     but it could make the solver worse at its job.
 	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
 	void SetCell(const FIntVector& cell,
 				 int32 tileID, FWFC_Transform3D permutation,
-				 bool persistent = true);
-	//Constrains the generator to always output the given face at the given cell.
+				 bool isPermanentConstraint = false);
+	//Explicitly forbids a tile at the given grid cell.
+	//
 	//This cannot be undone.
+	//You must call 'Start' before this!
+	//
+	//You may call this in the middle of generation rather than at the beginning,
+	//     but it could make the solver worse at its job.
+	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
+	void SetCellNot(const FIntVector& cell,
+				    int32 tileID, FWFC_Transform3D permutation);
+	//Explicitly forbids or forces a particular cell to be a particular tile.
+	//
+	//This cannot be undone.
+	//You must call 'Start' before this!
+	//
+	//You may call this in the middle of generation rather than at the beginning,
+	//     but it could make the solver worse at its job.
+	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
+	void SetCellConstraint(const FIntVector& cell,
+						   int32 tileID, FWFC_Transform3D permutation,
+						   bool forbid = false)
+	{
+		if (forbid)
+			SetCellNot(cell, tileID, permutation);
+		else
+			SetCell(cell, tileID, permutation, true);
+	}
+	
+	//Constrains the generator to always output the given face at the given cell.
+	//
+	//This cannot be undone.
+	//You must call 'Start' before this!
+	//
+	//You may call this in the middle of generation rather than at the beginning,
+	//     but it could make the solver worse at its job.
 	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
 	void SetFace(const FIntVector& cell, WFC_Directions3D face,
-				 int facePrototypeId, WFC_Transforms2D facePermutationOrientation,
-				 bool invert = false);
+				 int facePrototypeId, WFC_Transforms2D facePermutationOrientation);
 	//Constrains the generator to *never* output the given face at the given cell.
+	//
 	//This cannot be undone.
+	//You must call 'Start' before this!
+	//
+	//You may call this in the middle of generation rather than at the beginning,
+	//     but it could make the solver worse at its job.
 	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
 	void SetFaceNot(const FIntVector& cell, WFC_Directions3D face,
-					int facePrototypeId, WFC_Transforms2D facePermutationOrientation);
+				    int facePrototypeId, WFC_Transforms2D facePermutationOrientation);
+	//Explicitly forbids or forces a particular cell face.
+	//
+	//This cannot be undone.
+	//You must call 'Start' before this!
+	//
+	//You may call this in the middle of generation rather than at the beginning,
+	//     but it could make the solver worse at its job.
+	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
+	void SetFaceConstraint(const FIntVector& cell, WFC_Directions3D face,
+						   int facePrototypeId, WFC_Transforms2D facePermutationOrientation,
+						   bool forbid = false)
+	{
+		if (forbid)
+			SetFaceNot(cell, face, facePrototypeId, facePermutationOrientation);
+		else
+			SetFace(cell, face, facePrototypeId, facePermutationOrientation);
+	}
 
 	//Stops running the generator, leaving unset cells as permanently unsolved.
 	UFUNCTION(BlueprintCallable, Category="WFC/Ops")

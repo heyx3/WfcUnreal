@@ -134,39 +134,66 @@ TTuple<FWfcCellStatus, const TInstancedStruct<FWfcGameData>*> UWfcGenerator::Get
 	}
 }
 
-void UWfcGenerator::SetCell(const FIntVector& cell, int32 unrealTileID, FWFC_Transform3D permutation, bool persistent)
+void UWfcGenerator::SetCell(const FIntVector& cell,
+						    int32 unrealTileID, FWFC_Transform3D permutation,
+						    bool permanent)
 {
-	if (!state.IsSet())
+	if (!IsRunning())
 	{
-		UE_LOG(LogWFCpp, Error, TEXT("Can't set a WFC grid cell, because the WFC generator isn't initialized yet!"));
+		UE_LOG(LogWFCpp, Error, TEXT("Can't set a WFC grid cell, because the WFC generator isn't running!"));
 		return;
 	}
+	check(state.IsSet());
 	if (!state->Grid.Cells.IsIndexValid({ cell.X, cell.Y, cell.Z }))
 	{
 		UE_LOG(LogWFCpp, Error, TEXT("Cell index is out of range: %i,%i,%i"), cell.X, cell.Y, cell.Z);
 		return;
 	}
-	auto wfcTileID = wfcLibraryData.WfcTileIDByUnrealID[unrealTileID];
+	if (!wfcLibraryData.WfcTileIDByUnrealID.Contains(unrealTileID))
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("Invalid tile ID: %i"), unrealTileID);
+		return;
+	}
 	
-	state->SetCell({ cell.X, cell.Y, cell.Z }, wfcTileID,
-				   permutation.Unwrap(), persistent);
+	state->SetCell({ cell.X, cell.Y, cell.Z },
+				   wfcLibraryData.WfcTileIDByUnrealID[unrealTileID],
+				   permutation.Unwrap(), permanent);
+}
+
+void UWfcGenerator::SetCellNot(const FIntVector& cell,
+							   int32 unrealTileID, FWFC_Transform3D permutation)
+{
+	if (!IsRunning())
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("Can't forbid a WFC tile in a grid cell, because the generator isn't running!"));
+		return;
+	}
+	check(state.IsSet());
+	if (!state->Grid.Cells.IsIndexValid({ cell.X, cell.Y, cell.Z }))
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("Cell index is out of range: %i,%i,%i"), cell.X, cell.Y, cell.Z);
+		return;
+	}
+	if (!wfcLibraryData.WfcTileIDByUnrealID.Contains(unrealTileID))
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("Invalid tile ID: %i"), unrealTileID);
+		return;
+	}
+	
+	state->SetCellConstraintNot({ cell.X, cell.Y, cell.Z },
+							    wfcLibraryData.WfcTileIDByUnrealID[unrealTileID],
+								WFC::Tiled3D::TransformSet::Combine(permutation.Unwrap()));
 }
 
 void UWfcGenerator::SetFace(const FIntVector& cell, WFC_Directions3D face,
-							int facePrototypeId, WFC_Transforms2D facePermutationOrientation,
-							bool invert)
+                            int facePrototypeId, WFC_Transforms2D facePermutationOrientation)
 {
-	if (invert)
+	if (!IsRunning())
 	{
-		SetFaceNot(cell, face, facePrototypeId, facePermutationOrientation);
+		UE_LOG(LogWFCpp, Error, TEXT("Can't set a WFC grid cell's face, because the generator isn't running!"));
 		return;
 	}
-	
-	if (!state.IsSet())
-	{
-		UE_LOG(LogWFCpp, Error, TEXT("Can't set a WFC grid face, because the WFC generator isn't initialized yet!"));
-		return;
-	}
+	check(state.IsSet());
 	if (!state->Grid.Cells.IsIndexValid({ cell.X, cell.Y, cell.Z }))
 	{
 		UE_LOG(LogWFCpp, Error, TEXT("Cell index is out of range: %i,%i,%i"), cell.X, cell.Y, cell.Z);
@@ -177,11 +204,33 @@ void UWfcGenerator::SetFace(const FIntVector& cell, WFC_Directions3D face,
 		UE_LOG(LogWFCpp, Error, TEXT("Face prototype index is invalid: %i"), facePrototypeId);
 		return;
 	}
+	check(wfcLibraryData.WfcFacePrototypeFirstIDs.Contains(facePrototypeId));
 
-	auto points = tileset->FacePrototypes[facePrototypeId];
+	//Get the face points, with the rotation applied.
+	auto rawPoints = tileset->FacePrototypes[facePrototypeId]
+							  .Unwrap(wfcLibraryData.WfcFacePrototypeFirstIDs[facePrototypeId]);
+	auto permutedPoints = rawPoints;
+	for (auto srcPoint : WFC::Tiled3D::ALL_FACE_POINTS)
+	{
+		auto destCornerPoint = WFC::Tiled3D::TransformFaceCorner(
+			srcPoint,
+			static_cast<WFC::Tiled3D::Directions3D>(face),
+			static_cast<WFC::Transformations>(facePermutationOrientation)
+		);
+		permutedPoints.Corners[destCornerPoint] = rawPoints.Corners[srcPoint];
+
+		auto destEdgePoint = WFC::Tiled3D::TransformFaceEdge(
+			srcPoint,
+			static_cast<WFC::Tiled3D::Directions3D>(face),
+			static_cast<WFC::Transformations>(facePermutationOrientation)
+		);
+		permutedPoints.Edges[destEdgePoint] = rawPoints.Edges[srcPoint];
+	}
+	
 	state->SetFaceConstraint(
-		{ cell.X, cell.Y, cell.Z }, static_cast<WFC::Tiled3D::Directions3D>(face),
-		points.Unwrap(wfcLibraryData.WfcFacePrototypeFirstIDs[facePrototypeId])
+		{ cell.X, cell.Y, cell.Z },
+		static_cast<WFC::Tiled3D::Directions3D>(face),
+		permutedPoints
 	);
 }
 void UWfcGenerator::SetFaceNot(const FIntVector& cell, WFC_Directions3D face,
@@ -189,9 +238,10 @@ void UWfcGenerator::SetFaceNot(const FIntVector& cell, WFC_Directions3D face,
 {
 	if (!IsRunning())
 	{
-		UE_LOG(LogWFCpp, Error, TEXT("Can't forbid a WFC grid face, because the WFC generator isn't initialized yet!"));
+		UE_LOG(LogWFCpp, Error, TEXT("Can't forbid a WFC grid cell from having a particular face, because the generator isn't running!"));
 		return;
 	}
+	check(state.IsSet());
 	if (!state->Grid.Cells.IsIndexValid({ cell.X, cell.Y, cell.Z }))
 	{
 		UE_LOG(LogWFCpp, Error, TEXT("Cell index is out of range: %i,%i,%i"), cell.X, cell.Y, cell.Z);
@@ -202,12 +252,32 @@ void UWfcGenerator::SetFaceNot(const FIntVector& cell, WFC_Directions3D face,
 		UE_LOG(LogWFCpp, Error, TEXT("Face prototype index is invalid: %i"), facePrototypeId);
 		return;
 	}
-	check(state.IsSet());
 
-	auto points = tileset->FacePrototypes[facePrototypeId];
+	//Get the face points, with the rotation applied.
+	auto rawPoints = tileset->FacePrototypes[facePrototypeId]
+			  			    .Unwrap(wfcLibraryData.WfcFacePrototypeFirstIDs[facePrototypeId]);
+	auto permutedPoints = rawPoints;
+	for (auto srcPoint : WFC::Tiled3D::ALL_FACE_POINTS)
+	{
+		auto destCornerPoint = WFC::Tiled3D::TransformFaceCorner(
+			srcPoint,
+			static_cast<WFC::Tiled3D::Directions3D>(face),
+			static_cast<WFC::Transformations>(facePermutationOrientation)
+		);
+		permutedPoints.Corners[destCornerPoint] = rawPoints.Corners[srcPoint];
+
+		auto destEdgePoint = WFC::Tiled3D::TransformFaceEdge(
+			srcPoint,
+			static_cast<WFC::Tiled3D::Directions3D>(face),
+			static_cast<WFC::Transformations>(facePermutationOrientation)
+		);
+		permutedPoints.Edges[destEdgePoint] = rawPoints.Edges[srcPoint];
+	}
+	
 	state->SetFaceConstraintNot(
-		{ cell.X, cell.Y, cell.Z }, static_cast<WFC::Tiled3D::Directions3D>(face),
-		points.Unwrap(wfcLibraryData.WfcFacePrototypeFirstIDs[facePrototypeId])
+		{ cell.X, cell.Y, cell.Z },
+		static_cast<WFC::Tiled3D::Directions3D>(face),
+		permutedPoints
 	);
 }
 
