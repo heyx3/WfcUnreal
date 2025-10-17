@@ -80,7 +80,32 @@ public:
 	FIntVector GetGridSize() const;
     //Returns a progress indicator from 0 to 1.
     UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
-    float GetProgress() const;
+	float GetProgress() const;
+	//Returns/overwrites the input with the set of "interesting" cells, that may be selected for the next tick.
+	//Note that if there are any Unsolvable cells then those are handled first.
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
+	void GetNextCells(TSet<FIntVector>& output) const;
+	//Returns/overwrites the input with any cells that are no longer solveable.
+	//The next tick will clear/undo them.
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
+	void GetUnsolvableCells(TSet<FIntVector>& output) const;
+
+	//Gets the set of "interesting" cells, that may be selected for the next tick.
+	//Note that if there are any Unsolvable cells then those are handled first).
+	TSet<FIntVector> GetNextCells() const
+	{
+		TSet<FIntVector> o;
+		GetNextCells(o);
+		return o;
+	}
+	//Gets any cells that are no longer solveable.
+	//The next tick will clear/undo them.
+	TSet<FIntVector> GetUnsolvableCells() const
+	{
+		TSet<FIntVector> o;
+		GetUnsolvableCells(o);
+		return o;
+	}
 
 	//TODO: More ways to get information about the algorithm
 

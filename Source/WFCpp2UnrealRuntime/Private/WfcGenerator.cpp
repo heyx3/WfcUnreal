@@ -35,6 +35,32 @@ FIntVector UWfcGenerator::GetGridSize() const
 	return { 0, 0, 0 };
 }
 
+void UWfcGenerator::GetNextCells(TSet<FIntVector>& output) const
+{
+	output.Empty();
+	
+	if (!state.IsSet())
+	{
+		UE_LOG(LogWFCpp, Warning, TEXT("Calling 'GetNextCells()' when generation hasn't started yet! Returning an empty set"));
+		return;
+	}
+	
+	for (const auto& cell : state->GetNextCellsToProcess())
+		output.Add({ cell.x, cell.y, cell.z });
+}
+void UWfcGenerator::GetUnsolvableCells(TSet<FIntVector>& output) const
+{
+	output.Empty();
+	
+	if (!state.IsSet())
+	{
+		UE_LOG(LogWFCpp, Warning, TEXT("Calling 'GetUnsolvableCells()' when generation hasn't started yet! Returning an empty set"));
+		return;
+	}
+	
+	for (const auto& cell : state->GetUnsolvableCells())
+		output.Add({ cell.x, cell.y, cell.z });
+}
 
 FWfcCellStatus UWfcGenerator::GetCell(const FIntVector& cellPos, bool copyInData) const
 {
