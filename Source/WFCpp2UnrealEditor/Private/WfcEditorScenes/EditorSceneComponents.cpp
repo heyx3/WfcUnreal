@@ -9,6 +9,20 @@
 #include "Kismet/KismetMathLibrary.h"
 
 
+namespace
+{
+	UStaticMesh* LoadEditorUnitCubeMesh()
+	{
+		static const TCHAR* const Name = TEXT("/WFCpp2/Editor/WFCppEditorCube_0To1.WFCppEditorCube_0To1");
+		return LoadObject<UStaticMesh>(
+			nullptr,
+			Name,
+			nullptr, LOAD_EditorOnly
+		);
+	}
+}
+
+
 FEditorSceneComponent::FEditorSceneComponent(FPreviewScene* _owner, const FTransform& transform, TSubclassOf<UActorComponent> type)
 	: owner(_owner)
 {
@@ -159,4 +173,21 @@ FTransform FEditorPlaneComponent::GetTransform(const FVector& origin, const FVec
 		rot, origin,
 		FVector{ -1, sizeRelative.X, sizeRelative.Y }.GetAbs()
 	};
+}
+
+FEditorMeshComponent::FEditorMeshComponent(FPreviewScene* owner,
+										   const FBox3d& localArea, const FTransform& worldTransform,
+										   UMaterialInterface* material)
+	: FEditorMeshComponent(owner, LoadEditorUnitCubeMesh(),
+						   WfcppUnrealEditor::ComposeTransforms(
+						   	   FTransform{
+						   	   	   FQuat::Identity,
+						   	   	   localArea.GetCenter() - 0.5,
+						   	   	   localArea.GetSize()
+						   	   },
+						   	   worldTransform
+						   ),
+						   material)
+{
+	
 }

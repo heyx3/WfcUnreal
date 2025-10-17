@@ -262,6 +262,11 @@ public:
 	//Runs N updates of the generator (or until completion), then updates visualizations accordingly.
 	//For convenience, does nothing when n < 1.
 	void Tick(int n = 1);
+
+	//Updates the transform data for this generator sim, without having to restart the generator.
+	//Skips redrawing this object if nothing actually changed.
+	void ChangeSpace(const FTransform& tr, double extraSpacingBetweenTiles, bool immediateRedraw = true);
+	
 	
 	const class UWfcGenerator* GetGenerator() const { return generator; }
 
@@ -281,6 +286,7 @@ private:
 	{
 		WfcTileID TileID;
 		TUniquePtr<WfcTileVisualizer> Viz;
+		TArray<FEditorWireBoxComponent> ClearedViz;
 	};
 	TMap<FIntVector3, FSetCell> setCells;
 	
@@ -290,8 +296,11 @@ private:
 		TOptional<FEditorMeshComponent> TemperatureViz;
 		TOptional<FEditorTextComponent> EntropyViz;
 		TOptional<FEditorWireSphereComponent> BoringViz;
+		TArray<FEditorWireBoxComponent> ClearedViz;
 	};
 	TMap<FIntVector3, FUnsetCell> unsetCells;
 
-	FEditorWireBoxComponent areaBox;
+	TOptional<FEditorWireBoxComponent> areaBox;
+
+	void RefreshViz(const TMap<FIntVector, int>* unsolvableCellCounts = nullptr);
 };

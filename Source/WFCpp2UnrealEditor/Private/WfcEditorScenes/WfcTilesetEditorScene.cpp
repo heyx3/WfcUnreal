@@ -158,9 +158,10 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 		auto& generator = viewMode.Get<FEditorSceneObject_WfcGeneration>();
 		
 		generator.Tick(NGeneratorTicksToRun);
-		generator.RefreshSettings(GenerationSettings);
-		
 		NGeneratorTicksToRun = 0;
+
+		generator.ChangeSpace(FTransform{ }, SpacingBetweenTiles);
+		generator.RefreshSettings(GenerationSettings);
 		
 		owner->RedrawRequested(owner->Viewport);	
 	}

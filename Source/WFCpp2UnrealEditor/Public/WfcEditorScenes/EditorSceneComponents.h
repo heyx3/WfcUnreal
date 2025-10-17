@@ -70,6 +70,11 @@ struct WFCPP2UNREALEDITOR_API FEditorMeshComponent : public TEditorSceneComponen
 	FEditorMeshComponent(FPreviewScene* owner,
 						 UStaticMesh* mesh, const FTransform& transform,
 						 UMaterialInterface* material = nullptr);
+
+	//Creates a box covering the given local area, then transformed in the given way.
+	FEditorMeshComponent(FPreviewScene* owner,
+						 const FBox3d& localArea, const FTransform& worldTransform,
+						 UMaterialInterface* material = nullptr);
 };
 struct WFCPP2UNREALEDITOR_API FEditorWireSphereComponent : public TEditorSceneComponent<class USphereComponent>
 {

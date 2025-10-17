@@ -41,11 +41,12 @@ namespace
 
 	TStrongObjectPtr<UMaterialInstanceDynamic> CreateTemperatureEditorMaterial(FColor color)
 	{
-		static const TCHAR* const MaterialPath = TEXT("");
+		static const TCHAR* const MaterialPath = TEXT("/WFCpp2/Editor/M_WFCppEditor_TemperatureViz.M_WFCppEditor_TemperatureViz");
 		auto* materialAsset = LoadObject<UMaterialInterface>(nullptr, MaterialPath, nullptr, LOAD_EditorOnly);
 
 		auto* mat = UMaterialInstanceDynamic::Create(materialAsset, GetTransientPackage());
-		//TODO: Set material parameters
+		static const FName ParamColor = TEXT("Color");
+		mat->SetVectorParameterValue(ParamColor, color);
 		
 		return TStrongObjectPtr{ mat };
 	}
@@ -692,16 +693,9 @@ FEditorSceneObject_WfcGeneration::FEditorSceneObject_WfcGeneration(FWfcTilesetEd
 																   const UWfcTileset* _tileset,
 																   const FEditorSceneObject_WfcGeneration_Settings& _settings)
     : FEditorSceneObject(&owner),
-	  viewportClient(&_viewportClient), tileset(_tileset),
-	  generatorTr(tr),
-      tileSeparation(extraSpacingBetweenTiles + (_tileset ? _tileset->TileLength : 0.0)),
-      areaBox(&owner,
-      	      FBox{ tr.GetLocation() - ((tr.GetScale3D() * FVector{ _settings.Resolution } * tileSeparation) / 2.0f),
-      			    tr.GetLocation() + ((tr.GetScale3D() * FVector{ _settings.Resolution } * tileSeparation) / 2.0f) },
-      	      tr.Rotator(),
-      	      FLinearColor{ 0, 0, 0, 1 }.ToFColorSRGB())
+	  viewportClient(&_viewportClient), tileset(_tileset)
+	  //Other fields will be set up in RefreshViz(), called deeper inside
 {
-	areaBox.GetComponent()->SetLineThickness(20.0);
 	RefreshSettings(_settings);
 }
 void FEditorSceneObject_WfcGeneration::RefreshSettings(const FEditorSceneObject_WfcGeneration_Settings& newSettings)
@@ -723,6 +717,10 @@ void FEditorSceneObject_WfcGeneration::RefreshSettings(const FEditorSceneObject_
 
 		nIterations = 0;
 		Tick(currentSettings.ImmediatelyRunIterations);
+
+		//Manually force a visual refresh if no ticks were run.
+		if (currentSettings.ImmediatelyRunIterations < 1)
+			RefreshViz();
 	}
 }
 void FEditorSceneObject_WfcGeneration::Tick(int n)
@@ -730,13 +728,42 @@ void FEditorSceneObject_WfcGeneration::Tick(int n)
 	if (n < 1 || !generator)
 		return;
 
-	//Tick.
+	//Tick, and track things that happened during the tick.
+	TSet<FIntVector> tickUnsolvableCells;
+	TMap<FIntVector, int> unsolvableCellCounts;
 	for (int i = 0; i < n && generator->IsRunning(); ++i)
 	{
 		generator->Tick();
 		nIterations += 1;
+
+		generator->GetUnsolvableCells(tickUnsolvableCells);
+		for (const auto& uc : tickUnsolvableCells)
+			unsolvableCellCounts.FindOrAdd(uc, 0) += 1;
 	}
 
+	RefreshViz(&unsolvableCellCounts);
+}
+void FEditorSceneObject_WfcGeneration::RefreshViz(const TMap<FIntVector, int>* unsolvableCellCounts)
+{
+	//Clear out any previous visualization.
+	setCells.Empty();
+	unsetCells.Empty();
+	if (!tileset.IsValid() || !generator)
+		return;
+	
+	//Update the visualized generator bounds.
+	auto areaExtent = generatorTr.GetScale3D() * FVector{ currentSettings.Resolution } * tileSeparation / 2.0f;
+	areaBox = {
+		Owner,
+		FBox{
+			generatorTr.GetLocation() - areaExtent,
+			generatorTr.GetLocation() + areaExtent
+		},
+		generatorTr.Rotator(),
+		FLinearColor{ 0, 0, 0, 1 }.ToFColorSRGB()
+	};
+	areaBox->GetComponent()->SetLineThickness(20.0);
+	
 	//Get temperature metadata.
 	float tempMin, tempMax, tempMean, tempMedian;
 	generator->GetTemperatureData(tempMin, tempMax, tempMean, tempMedian);
@@ -746,9 +773,7 @@ void FEditorSceneObject_WfcGeneration::Tick(int n)
 		0.5f
 	);
 	
-	//Visualize.
-	setCells.Empty();
-	unsetCells.Empty();
+	//Visualize each cell.
 	auto areaWorldSize = generatorTr.GetScale3D() * FVector{ currentSettings.Resolution } *
 						   tileSeparation;
 	for (int z = 0; z < currentSettings.Resolution.Z; ++z)
@@ -773,6 +798,29 @@ void FEditorSceneObject_WfcGeneration::Tick(int n)
 					generatorTr
 				);
 
+				//Set up a viz of how many times this cell got cleared in the last round of ticks.
+				TArray<FEditorWireBoxComponent> unsolvableViz;
+				int nUnsolvableInstances = unsolvableCellCounts ?
+											 WFCppUtils::TryGetByCopy(*unsolvableCellCounts, { x, y, z }, 0) :
+											 0;
+				for (int unsolvedI = 0; unsolvedI < nUnsolvableInstances; ++unsolvedI)
+				{
+					float lineThickness = FMath::Max(1.0f, tileset->TileLength) / 10.0f / (unsolvedI + 1);
+					float relativeSize = 0.9f / (unsolvedI + 1); 
+
+					FTransform unsolvableTr = WfcppUnrealEditor::ComposeTransforms(
+						FTransform{
+						    FQuat::Identity,
+							FVector::ZeroVector,
+							FVector{ relativeSize }
+						},
+						cellWorldTr
+					);
+					
+					unsolvableViz.Emplace(Owner, unsolvableTr, FColor::Red);
+					unsolvableViz.Last().GetComponent()->SetLineThickness(lineThickness);
+				}
+
 				auto [cellData, cellUserData] = generator->GetCellWithPtr({ x, y, z });
 				if (cellData.IsSet)
 				{
@@ -790,12 +838,14 @@ void FEditorSceneObject_WfcGeneration::Tick(int n)
 									cellData.IfSet.TilePermutation.ToFTransform(),
 									cellWorldTr
 								)
-							})
+							}),
+							MoveTemp(unsolvableViz)
 						})
 					);
 				}
 				else if (minInterestingTemperature > 0 && cellData.Temperature >= minInterestingTemperature)
 				{
+					FLinearColor entropyColor = FLinearColor::Black;
 					auto entropyLabel = FString::Printf(
 						TEXT("%i/%i possibilities (%f)"),
 						cellData.IfUnset.NPossibilities,
@@ -809,17 +859,34 @@ void FEditorSceneObject_WfcGeneration::Tick(int n)
 					);
 
 					FLinearColor temperatureColor = FLinearColor::LerpUsingHSV(
-						{ 0, 1, 0 },
-						{ 1, 0, 0 },
+						{ 0, 1, 0, 0 },
+						{ 1, 0, 0, 0.5 },
 						FMath::GetRangePct(minInterestingTemperature, tempMax, cellData.Temperature)
 					);
-					
-					// unsetCells.Add(
-					// 	{ x, y, z },
-					// 	std::move(FUnsetCell{
-					// 		cellData.Temperature,
-					// 	})
-					// );
+					auto temperatureMaterial = CreateTemperatureEditorMaterial(temperatureColor.ToFColorSRGB());
+
+					unsetCells.Add(
+						{ x, y, z },
+						std::move(FUnsetCell{
+							cellData.Temperature,
+							FEditorMeshComponent{
+								Owner,
+								FBox{
+									-FVector{ tileset->TileLength * 0.9 / 2 },
+									 FVector{ tileset->TileLength * 0.9 / 2 }
+								},
+								cellWorldTr,
+								temperatureMaterial.Get()
+							},
+							FEditorTextComponent{
+								Owner,
+								entropyTr, entropyLabel, entropyColor.ToFColorSRGB(),
+								EHTA_Center, EVRTA_TextBottom
+							},
+							NullOpt,
+							MoveTemp(unsolvableViz)
+						})
+					);
 				}
 				else
 				{
@@ -836,9 +903,25 @@ void FEditorSceneObject_WfcGeneration::Tick(int n)
 					    			cellWorldTr
 					    		),
 					    		FLinearColor{ 0.8f, 0.6f, 0.3f }.ToFColorSRGB()
-					    	}
+					    	},
+							MoveTemp(unsolvableViz)
 					    })
 					);
 				}
 			}
+}
+void FEditorSceneObject_WfcGeneration::ChangeSpace(const FTransform& tr, double extraSpacingBetweenTiles,
+												   bool immediateRedraw)
+{
+	bool anyChanges = false;
+
+	anyChanges |= !tr.Equals(generatorTr, 0.0);
+	generatorTr = tr;
+
+	float newTileSeparation = extraSpacingBetweenTiles + (tileset.IsValid() ? tileset->TileLength : 0.0);
+	anyChanges |= (tileSeparation != newTileSeparation);
+	tileSeparation = newTileSeparation;
+	
+	if (immediateRedraw && anyChanges)
+		RefreshViz();
 }

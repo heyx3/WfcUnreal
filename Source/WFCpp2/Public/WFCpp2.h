@@ -16,3 +16,17 @@ public:
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
 };
+
+
+//General utilities:
+struct WFCPP2_API WFCppUtils
+{
+	template<typename TKey, typename TValue, typename TAllocator, typename TKeyFuncs>
+	static TValue TryGetByCopy(const TMap<TKey, TValue, TAllocator, TKeyFuncs>& map,
+							   const TKey& key,
+							   const TValue& defaultValue = { })
+	{
+		const TValue* found = map.Find(key);
+		return found ? *found : defaultValue;
+	}
+};
