@@ -61,6 +61,10 @@ public:
 
 
 //Encapsulates the running of the WFC algorithm on a tileset.
+//
+//For visualization and debugging purposes,
+//    it can also save the state of the algorithm to a buffer on request
+//    and then rewind to those states.
 UCLASS(BlueprintType)
 class WFCPP2UNREALRUNTIME_API UWfcGenerator : public UObject
 {
@@ -135,8 +139,23 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
 	int GetTickCount() const { return static_cast<int>(state->CurrentTimestamp); }
 
-	
-	//-------------
+	//Gets the number of states you've saved (from calling 'SaveState()').
+	//If the generator hasn't started yet, this returns 0.
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
+	int GetHistoryLength() const { return stateHistoryBuffer.Num(); }
+	//Gets the number of ticks between the most recent saved state (from calling 'SaveState()')
+	//    and the present.
+	//E.g. if you just called SaveState(), then this returns 0.
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
+	int GetTicksSinceLastSave() const;
+
+	//Mainly intended for debugging.
+	const auto& GetHistoryBuffer() const { return stateHistoryBuffer; }
+	//Mainly intended for debugging.
+	const auto* UnwrapStandardRunner() const { return state.GetPtrOrNull(); }
+
+
+    //-------------
 	//  Operations
 	//-------------
 	
@@ -239,6 +258,7 @@ public:
 	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
 	void Tick(int nIterations = 1);
 
+	//Destroys all progress this generator had, and leave it ready for another call to `Start()`.
 	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
 	void Cancel();
 	
@@ -247,13 +267,28 @@ public:
 	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
 	bool RunToEnd(int timeoutIterations = 10000);
 
+	//Saves the current state of the algorithm to a buffer.
+	//You can call 'LoadState()' to pop this saved state off of the buffer,
+	//   effectively rewinding the algorithm.
+	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
+	void SaveState();
+	//Pops the most recently-saved state of this algorithm (from calling 'SaveState()'),
+	//    and overwrites the current state with it.
+	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
+	void LoadState();
+	//Removes all saved states from this generator, freeing up that memory.
+	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
+	void ClearStateHistory();
+
 	
 private:
     UPROPERTY()
     const UWfcTileset* tileset;
+	UWfcTileset::Unwrapped wfcLibraryData;
     
 	WfcSimState status = WfcSimState::Off;
+	
 	TOptional<WFC::Tiled3D::StandardRunner> state;
+	TArray<WFC::Tiled3D::StandardRunner> stateHistoryBuffer;
 
-	UWfcTileset::Unwrapped wfcLibraryData;
 };

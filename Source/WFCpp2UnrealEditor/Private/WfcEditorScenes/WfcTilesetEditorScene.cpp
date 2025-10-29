@@ -156,6 +156,10 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 	else if (viewMode.IsType<FEditorSceneObject_WfcGeneration>())
 	{
 		auto& generator = viewMode.Get<FEditorSceneObject_WfcGeneration>();
+
+		for (int rewindI = 0; rewindI < NRewindsToRun; ++rewindI)
+			generator.Rewind();
+		NRewindsToRun = 0;
 		
 		generator.Tick(NGeneratorTicksToRun);
 		NGeneratorTicksToRun = 0;

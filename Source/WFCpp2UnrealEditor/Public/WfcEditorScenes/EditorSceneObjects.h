@@ -262,6 +262,9 @@ public:
 	//Runs N updates of the generator (or until completion), then updates visualizations accordingly.
 	//For convenience, does nothing when n < 1.
 	void Tick(int n = 1);
+	//Undoes the previous N-ticks the user executed.
+	//You must first check the generator to see if any history exists.
+	void Rewind();
 
 	//Updates the transform data for this generator sim, without having to restart the generator.
 	//Skips redrawing this object if nothing actually changed.
@@ -274,7 +277,10 @@ private:
 
 	FWfcTilesetEditorViewportClient* viewportClient;
 	TWeakObjectPtr<const UWfcTileset> tileset;
+	
 	TObjectPtr<class UWfcGenerator> generator;
+	TMap<FIntVector, int> currentUnsolvableCellCounts;
+	TArray<TMap<FIntVector, int>> generatorHistoryOfUnsolvableCellCounts;
 
 	FTransform generatorTr;
 	FEditorSceneObject_WfcGeneration_Settings currentSettings;
@@ -302,5 +308,5 @@ private:
 
 	TOptional<FEditorWireBoxComponent> areaBox;
 
-	void RefreshViz(const TMap<FIntVector, int>* unsolvableCellCounts = nullptr);
+	void RefreshViz();
 };

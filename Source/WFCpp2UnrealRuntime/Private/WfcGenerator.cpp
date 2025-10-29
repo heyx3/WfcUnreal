@@ -62,6 +62,20 @@ void UWfcGenerator::GetUnsolvableCells(TSet<FIntVector>& output) const
 		output.Add({ cell.x, cell.y, cell.z });
 }
 
+int UWfcGenerator::GetTicksSinceLastSave() const
+{
+	if (stateHistoryBuffer.IsEmpty())
+		return 0;
+	check(state);
+
+	//Watch for underflow with these uints!
+	//Fortunately it should never happen with the history logic as it's currently written. 
+	auto t1 = stateHistoryBuffer.Last().CurrentTimestamp,
+		 t2 = state->CurrentTimestamp;
+	check(t2 >= t1);
+	return t2 - t1;
+}
+
 FWfcCellStatus UWfcGenerator::GetCell(const FIntVector& cellPos, bool copyInData) const
 {
 	if (GetStatus() == WfcSimState::Off)
@@ -307,12 +321,10 @@ void UWfcGenerator::SetFaceNot(const FIntVector& cell, WFC_Directions3D face,
 	);
 }
 
-
 int UWfcGenerator::GetNTilePossibilities() const
 {
 	return state.IsSet() ? state->Grid.NPermutedTiles : 0;
 }
-
 
 void UWfcGenerator::Stop()
 {
@@ -346,9 +358,9 @@ void UWfcGenerator::GetTemperatureData(float& out_min, float& out_max,
 
 void UWfcGenerator::Start(const UWfcTileset* tiles,
                           const FIntVector& gridSize,
-			              int seed,
-						  float temperatureClearGrowthRateT, float fuzziness, int maxUnwinding,
-					      bool periodicX, bool periodicY, bool periodicZ)
+                          int seed,
+                          float temperatureClearGrowthRateT, float fuzziness, int maxUnwinding,
+                          bool periodicX, bool periodicY, bool periodicZ)
 {
 	//Clean up from any previous runs.
 	if (IsRunning())
@@ -376,6 +388,7 @@ void UWfcGenerator::Cancel()
 {
     status = WfcSimState::Off;
     state.Reset();
+	stateHistoryBuffer.Empty();
 }
 
 void UWfcGenerator::Tick(int nIterations)
@@ -407,4 +420,44 @@ bool UWfcGenerator::RunToEnd(int timeoutIterations)
         status = WfcSimState::Running;
         return false;
     }
+}
+
+void UWfcGenerator::SaveState()
+{
+	if (status == WfcSimState::Off)
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("Trying to SaveState() on a UWfcGenerator that isn't running yet!"));
+		return;
+	}
+	check(state);
+	
+	stateHistoryBuffer.Add(*state);
+}
+void UWfcGenerator::LoadState()
+{
+	if (status == WfcSimState::Off)
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("Trying to LoadState() on a UWfcGenerator that isn't running yet!"));
+		return;
+	}
+	check(state);
+
+	if (stateHistoryBuffer.IsEmpty())
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("There is no history; can't use LoadState() on this UWfcGenerator!"));
+		return;
+	}
+
+	state = std::move(stateHistoryBuffer.Pop());
+}
+void UWfcGenerator::ClearStateHistory()
+{
+	if (status == WfcSimState::Off)
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("Trying to ClearStateHistory() on a UWfcGenerator that isn't running yet!"));
+		return;
+	}
+	check(state);
+	
+	stateHistoryBuffer.Empty();
 }

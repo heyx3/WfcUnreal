@@ -44,12 +44,24 @@ public:
 	
 	FEditorSceneObject_WfcGeneration_Settings GenerationSettings;
 	int NGeneratorTicksToRun = 0; //Consumed on every Refresh() call
+	int NRewindsToRun = 0; //Consumed on every Refresh() call
+
 	
     FWfcTilesetEditorScene(ConstructionValues cvs = ConstructionValues());
 
+	
     //Call continuously so that this scene can respond to changes in tile data, camera, etc.
     void Refresh(UWfcTileset* tileset, TOptional<WfcTileID> tileID, const FVector& camPos,
                  class FWfcTilesetEditorViewportClient* owner);
+
+	//Gets the inner generation object, or null if this scene isn't generating right now.
+	const FEditorSceneObject_WfcGeneration* GetGeneratorManager() const
+	{
+		return viewMode.IsType<FEditorSceneObject_WfcGeneration>() ?
+				   &viewMode.Get<FEditorSceneObject_WfcGeneration>() :
+				   nullptr;
+	}
+	
     
 private:
     

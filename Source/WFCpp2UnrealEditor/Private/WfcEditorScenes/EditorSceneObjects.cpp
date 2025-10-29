@@ -696,6 +696,7 @@ FEditorSceneObject_WfcGeneration::FEditorSceneObject_WfcGeneration(FWfcTilesetEd
 	  viewportClient(&_viewportClient), tileset(_tileset)
 	  //Other fields will be set up in RefreshViz(), called deeper inside
 {
+	ChangeSpace(tr, extraSpacingBetweenTiles, false);
 	RefreshSettings(_settings);
 }
 void FEditorSceneObject_WfcGeneration::RefreshSettings(const FEditorSceneObject_WfcGeneration_Settings& newSettings)
@@ -714,11 +715,13 @@ void FEditorSceneObject_WfcGeneration::RefreshSettings(const FEditorSceneObject_
 		generator = NewObject<UWfcGenerator>();
 		generator->Start(tileset.Get(), currentSettings.Resolution, currentSettings.Seed,
 					     currentSettings.TemperatureClearGrowthRateT, currentSettings.Fuzziness);
+		currentUnsolvableCellCounts.Empty();
+		generatorHistoryOfUnsolvableCellCounts.Empty();
 
 		nIterations = 0;
 		Tick(currentSettings.ImmediatelyRunIterations);
 
-		//Manually force a visual refresh if no ticks were run.
+		//If no ticks were run then we need to manually force a visual refresh.
 		if (currentSettings.ImmediatelyRunIterations < 1)
 			RefreshViz();
 	}
@@ -728,9 +731,12 @@ void FEditorSceneObject_WfcGeneration::Tick(int n)
 	if (n < 1 || !generator)
 		return;
 
+	generator->SaveState();
+	generatorHistoryOfUnsolvableCellCounts.Add(currentUnsolvableCellCounts);
+	
 	//Tick, and track things that happened during the tick.
 	TSet<FIntVector> tickUnsolvableCells;
-	TMap<FIntVector, int> unsolvableCellCounts;
+	currentUnsolvableCellCounts.Empty();
 	for (int i = 0; i < n && generator->IsRunning(); ++i)
 	{
 		generator->Tick();
@@ -738,12 +744,22 @@ void FEditorSceneObject_WfcGeneration::Tick(int n)
 
 		generator->GetUnsolvableCells(tickUnsolvableCells);
 		for (const auto& uc : tickUnsolvableCells)
-			unsolvableCellCounts.FindOrAdd(uc, 0) += 1;
+			currentUnsolvableCellCounts.FindOrAdd(uc, 0) += 1;
 	}
-
-	RefreshViz(&unsolvableCellCounts);
+	
+	RefreshViz();
 }
-void FEditorSceneObject_WfcGeneration::RefreshViz(const TMap<FIntVector, int>* unsolvableCellCounts)
+void FEditorSceneObject_WfcGeneration::Rewind()
+{
+	check(generator && generator->GetHistoryLength() > 0);
+
+	generator->LoadState();
+	currentUnsolvableCellCounts = generatorHistoryOfUnsolvableCellCounts.Pop();
+
+	RefreshViz();
+}
+
+void FEditorSceneObject_WfcGeneration::RefreshViz()
 {
 	//Clear out any previous visualization.
 	setCells.Empty();
@@ -760,7 +776,10 @@ void FEditorSceneObject_WfcGeneration::RefreshViz(const TMap<FIntVector, int>* u
 			generatorTr.GetLocation() + areaExtent
 		},
 		generatorTr.Rotator(),
-		FLinearColor{ 0, 0, 0, 1 }.ToFColorSRGB()
+		(generator->IsRunning() ?
+			FLinearColor{ 0, 0, 0, 1 } :
+			FLinearColor{ 0.4, 1, 0.4, 1 }
+		).ToFColorSRGB()
 	};
 	areaBox->GetComponent()->SetLineThickness(20.0);
 	
@@ -800,9 +819,7 @@ void FEditorSceneObject_WfcGeneration::RefreshViz(const TMap<FIntVector, int>* u
 
 				//Set up a viz of how many times this cell got cleared in the last round of ticks.
 				TArray<FEditorWireBoxComponent> unsolvableViz;
-				int nUnsolvableInstances = unsolvableCellCounts ?
-											 WFCppUtils::TryGetByCopy(*unsolvableCellCounts, { x, y, z }, 0) :
-											 0;
+				int nUnsolvableInstances = WFCppUtils::TryGetByCopy(currentUnsolvableCellCounts, { x, y, z }, 0);
 				for (int unsolvedI = 0; unsolvedI < nUnsolvableInstances; ++unsolvedI)
 				{
 					float lineThickness = FMath::Max(1.0f, tileset->TileLength) / 10.0f / (unsolvedI + 1);
@@ -812,7 +829,7 @@ void FEditorSceneObject_WfcGeneration::RefreshViz(const TMap<FIntVector, int>* u
 						FTransform{
 						    FQuat::Identity,
 							FVector::ZeroVector,
-							FVector{ relativeSize }
+							FVector{ (tileset->TileLength / 2.0) * relativeSize }
 						},
 						cellWorldTr
 					);
@@ -824,6 +841,7 @@ void FEditorSceneObject_WfcGeneration::RefreshViz(const TMap<FIntVector, int>* u
 				auto [cellData, cellUserData] = generator->GetCellWithPtr({ x, y, z });
 				if (cellData.IsSet)
 				{
+					auto& debugTileData = tileset->Tiles[cellData.IfSet.TileID].Data.Get<FWfcGameData>();
 					setCells.Add(
 						{ x, y, z },
 						std::move(FSetCell{
@@ -847,7 +865,7 @@ void FEditorSceneObject_WfcGeneration::RefreshViz(const TMap<FIntVector, int>* u
 				{
 					FLinearColor entropyColor = FLinearColor::Black;
 					auto entropyLabel = FString::Printf(
-						TEXT("%i/%i possibilities (%f)"),
+						TEXT("%i/%i possibilities\n(%f)"),
 						cellData.IfUnset.NPossibilities,
 						generator->GetNTilePossibilities(),
 						static_cast<float>(cellData.IfUnset.NPossibilities) /
@@ -865,7 +883,7 @@ void FEditorSceneObject_WfcGeneration::RefreshViz(const TMap<FIntVector, int>* u
 					);
 					auto temperatureMaterial = CreateTemperatureEditorMaterial(temperatureColor.ToFColorSRGB());
 
-					unsetCells.Add(
+					auto& cellViz = unsetCells.Add(
 						{ x, y, z },
 						std::move(FUnsetCell{
 							cellData.Temperature,
@@ -887,6 +905,7 @@ void FEditorSceneObject_WfcGeneration::RefreshViz(const TMap<FIntVector, int>* u
 							MoveTemp(unsolvableViz)
 						})
 					);
+					cellViz.EntropyViz->GetComponent()->SetWorldSize(tileset->TileLength / 100);
 				}
 				else
 				{

@@ -17,6 +17,7 @@
 #include "EditorStyleSet.h"
 #include "IStructureDetailsView.h"
 #include "SEnumCombo.h"
+#include "WfcGenerator.h"
 
 #include "WFCpp2UnrealEditor.h"
 #include "WfcEditorScenes/WfcTilesetEditorScene.h"
@@ -144,6 +145,28 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 				return EVisibility::Hidden;
 		}
 	};
+	auto showIfGeneratingAndNotDoneFn = [&]() {
+		auto* generation = GetScene().GetGeneratorManager();
+		if (!generation)
+			return EVisibility::Collapsed;
+
+		if (!generation->GetGenerator()->IsRunning())
+			return EVisibility::Collapsed;
+
+		return EVisibility::Visible;
+	};
+	auto showIfGeneratingWithHistoryFn = [&](bool keepLayout) { return [&]() {
+		auto hideValue = (keepLayout ? EVisibility::Hidden : EVisibility::Collapsed);
+		
+		auto* generation = GetScene().GetGeneratorManager();
+		if (!generation)
+			return hideValue;
+
+		if (generation->GetGenerator()->GetHistoryLength() <= 0)
+			return hideValue;
+
+		return EVisibility::Visible;
+	}; };
 	auto faceMatcherToggleWidget = [&](WFC_Directions3D face)
 	{
 		auto* scene = &GetScene();
@@ -343,7 +366,25 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 					[
 						SNew(SButton)
 							.Text(FText::FromString(TEXT("Execute")))
+							.Visibility_Lambda(showIfGeneratingAndNotDoneFn)
 							.OnPressed_Lambda([&]() { GetScene().NGeneratorTicksToRun += nTicksPerClick; })
+					]
+					+ SHorizontalBox::Slot()
+					[
+						SNew(SSpacer)
+							.Size(FVector2D{ 15, 1 })
+					]
+					+ SHorizontalBox::Slot()
+					[
+						SNew(SButton)
+						    .Text(FText::FromString(TEXT("Rewind once")))
+						    .Visibility_Lambda(showIfGeneratingWithHistoryFn(true))
+							.OnPressed_Lambda([&]() { GetScene().NRewindsToRun += 1; })
+					]
+					+ SHorizontalBox::Slot()
+					[
+						SNew(STextBlock)
+							.Text_Lambda([&]() { return FText::FromString(FString::Printf(TEXT("(%i)"), GetScene().GetGeneratorManager()->GetGenerator()->GetHistoryLength())); })
 					]
 				]
 			];
