@@ -42,20 +42,29 @@ public:
 	int GetFacePrototype(const FString& nickname, bool& foundFace) const;
 	TOptional<int> GetFacePrototype(const FString& nickname) const;
 
-	struct Unwrapped
+	struct WFCPP2UNREALRUNTIME_API Unwrapped
 	{
 		std::vector<WFC::Tiled3D::Tile> Tiles;
-		TArray<WfcTileID> WfcTileIDs;
+		TArray<WfcTileID> WfcTileIDs; //TODO: Rename 'UnrealTileIDsByWfcID'
 		TMap<WfcTileID, WFC::Tiled3D::TileIdx> WfcTileIDByUnrealID;
 
 		//Each face prototype is given four unique point ID's (re-used by corners and edges),
 		//    even if it doesn't use all four.
+		//See 'FacePrototypesByWfcPoint'. 
 		TMap<WfcFacePrototypeID, WFC::Tiled3D::PointID> WfcFacePrototypeFirstIDs;
+		//Tells you the face prototype based on any of its four WFC point IDs.
+		TMap<WFC::Tiled3D::PointID, WfcFacePrototypeID> FacePrototypesByWfcPoint;
 
 		//Internal buffer; not part of the unwrapped data.
 		TSet<FWFC_Transform3D> _supportedTransforms;
 		//Internal buffer; not part of the unwrapped data.
 		TSet<int32> _sortedUnrealIDs;
+
+		//Finds the Unreal face data matching the given WFC face data.
+		TOptional<TTuple<WfcFacePrototypeID, WFC_Transforms2D>> ToUnrealFace(
+			const WFC::Tiled3D::FacePermutation& wfcFace,
+			const UWfcTileset* tileset
+		) const;
 	};
 	//Converts this tileset into a plain WFC library tileset.
 	//Guaranteed to produce the same thing every time it's called (same tile/point ID's).

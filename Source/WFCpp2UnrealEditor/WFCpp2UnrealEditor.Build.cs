@@ -27,21 +27,17 @@ public class WFCpp2UnrealEditor : ModuleRules
                 "UnrealEd",
                 "Json", "Slate", "SlateCore", "EditorStyle", "EditorWidgets",
                 "Kismet", "KismetWidgets",
-                "PropertyEditor", "WorkspaceMenuStructure", "ContentBrowser",
+                "PropertyEditor", "WorkspaceMenuStructure",
                 "AdvancedPreviewScene",
                 "RenderCore",
-                "Projects", "AssetRegistry",
+                "Projects", "AssetRegistry", "ContentBrowser",
                 
                 "DataprepCore" //For some utility functions
             }
         );
         
         PrivateIncludePathModuleNames.AddRange(new [] {
-            "Settings",
-            "AssetTools", "LevelEditor"
-        });
-        DynamicallyLoadedModuleNames.AddRange(new[] {
-            "AssetTools"
+            "Settings", "LevelEditor"
         });
     }
 }

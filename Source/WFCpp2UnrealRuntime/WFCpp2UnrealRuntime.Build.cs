@@ -15,7 +15,7 @@ public class WFCpp2UnrealRuntime : ModuleRules
         );
         if (Target.bCompileAgainstEditor)
             PrivateDependencyModuleNames.AddRange(new[] {
-                "AssetTools"
+                "AssetTools", "UnrealEd"
             });
 
         PrivateDependencyModuleNames.AddRange(

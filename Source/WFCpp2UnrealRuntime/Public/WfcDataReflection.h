@@ -21,6 +21,7 @@ enum class WFC_Directions3D : uint8
 };
 static_assert(static_cast<int>(WFC_Directions3D::MinX) == WFC::Tiled3D::Directions3D::MinX,
 			  "Needed to satisfy the compiler");
+ENUM_RANGE_BY_COUNT(WFC_Directions3D, WFC::Tiled3D::N_DIRECTIONS_3D);
 
 //Unique identifiers for the four corners or edges of a face,
 //     ordered in world-space to achieve trivial comparison of opposite faces.
@@ -59,7 +60,7 @@ ENUM_RANGE_BY_COUNT(WFC_FacePoints, WFC::Tiled3D::N_FACE_POINTS);
 UENUM(Category=WFC, BlueprintType)
 enum class WFC_Transforms2D : uint8
 {
-	None = 0, //WFC::Transformations::None
+	None = 0, //WFC::Transformations::None, but UHT demands a constant 0
 
 	Rotate90CW = WFC::Transformations::Rotate90CW,
 	Rotate180 = WFC::Transformations::Rotate180,
@@ -73,8 +74,8 @@ enum class WFC_Transforms2D : uint8
 	//Mirror along the secondary diagonal.
 	FlipDiag2 = WFC::Transformations::FlipDiag2
 };
-static_assert(static_cast<int>(WFC_Transforms2D::None) == WFC::Transformations::None,
-			  "Needed to satisfy the compiler");
+static_assert(static_cast<int>(WFC_Transforms2D::None) == WFC::Transformations::None);
+ENUM_RANGE_BY_FIRST_AND_LAST(WFC_Transforms2D, WFC_Transforms2D::None, WFC_Transforms2D::FlipDiag2);
 
 
 UENUM(Category=WFC, BlueprintType)

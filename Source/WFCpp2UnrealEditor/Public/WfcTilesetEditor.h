@@ -4,6 +4,8 @@
 #include "Toolkits/AssetEditorToolkit.h"
 
 #include "WfcTileset.h"
+#include "WfcEditorScenes/WfcTilesetEditorScene.h"
+
 
 class IWfcTilesetEditor : public FAssetEditorToolkit
 {
@@ -60,6 +62,10 @@ private:
 
     UWfcTileset* tileset = nullptr;
     TOptional<WfcTileID> tileToVisualize;
+
+	EWfcTilesetEditorMode lastNonOverriddenMode = EWfcTilesetEditorMode::Tile;
+	class UWfcGeneratorInitialState* initialGeneratorState = nullptr;
+	
     TArray<TSharedPtr<FString>> tilesetTileSelectorChoices;
     TArray<int> tilesetTileSelectorChoiceIDs;
 

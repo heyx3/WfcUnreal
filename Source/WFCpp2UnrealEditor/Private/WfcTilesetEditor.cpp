@@ -17,9 +17,9 @@
 #include "EditorStyleSet.h"
 #include "IStructureDetailsView.h"
 #include "SEnumCombo.h"
-#include "WfcGenerator.h"
 
 #include "WFCpp2UnrealEditor.h"
+#include "WfcGenerator.h"
 #include "WfcEditorScenes/WfcTilesetEditorScene.h"
 #include "WfcTilesetEditorSceneViewTab.h"
 #include "WfcTilesetEditorViewport.h"
@@ -119,6 +119,7 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 			case EWfcTilesetEditorMode::Tile:
 			case EWfcTilesetEditorMode::Permutations:
 			case EWfcTilesetEditorMode::Generation:
+			case EWfcTilesetEditorMode::OverrideGeneration:
 				return EVisibility::Collapsed;
 			
 			case EWfcTilesetEditorMode::Matches:
@@ -129,12 +130,13 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 				return EVisibility::Hidden;
 		}
 	};
-	auto showIfGeneratingFn = [&]() {
+	auto showIfGeneratingNotOverrideFn = [&]() {
 		switch (GetScene().Mode)
 		{
 			case EWfcTilesetEditorMode::Matches:
 			case EWfcTilesetEditorMode::Permutations:
 			case EWfcTilesetEditorMode::Tile:
+			case EWfcTilesetEditorMode::OverrideGeneration:
 				return EVisibility::Collapsed;
 			
 			case EWfcTilesetEditorMode::Generation:
@@ -143,6 +145,58 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 			default:
 				check(false);
 				return EVisibility::Hidden;
+		}
+	};
+	auto showIfGeneratingOrOverrideFn = [&]() {
+		switch (GetScene().Mode)
+		{
+			case EWfcTilesetEditorMode::Matches:
+			case EWfcTilesetEditorMode::Permutations:
+			case EWfcTilesetEditorMode::Tile:
+				return EVisibility::Collapsed;
+			
+			case EWfcTilesetEditorMode::Generation:
+			case EWfcTilesetEditorMode::OverrideGeneration:
+				return EVisibility::Visible;
+
+			default:
+				check(false);
+				return EVisibility::Hidden;
+		}
+	};
+
+	auto showIfOverrideGeneratingFn = [&]() {
+		switch (GetScene().Mode)
+		{
+			case EWfcTilesetEditorMode::Matches:
+			case EWfcTilesetEditorMode::Permutations:
+			case EWfcTilesetEditorMode::Tile:
+			case EWfcTilesetEditorMode::Generation:
+				return EVisibility::Collapsed;
+			
+			case EWfcTilesetEditorMode::OverrideGeneration:
+				return EVisibility::Visible;
+
+			default:
+				check(false);
+			return EVisibility::Hidden;
+		}
+	};
+	auto showIfNotOverrideGeneratingFn = [&]() {
+		switch (GetScene().Mode)
+		{
+			case EWfcTilesetEditorMode::Matches:
+			case EWfcTilesetEditorMode::Permutations:
+			case EWfcTilesetEditorMode::Tile:
+			case EWfcTilesetEditorMode::Generation:
+				return EVisibility::Visible;
+			
+			case EWfcTilesetEditorMode::OverrideGeneration:
+				return EVisibility::Collapsed;
+
+			default:
+				check(false);
+			return EVisibility::Hidden;
 		}
 	};
 	auto showIfGeneratingAndNotDoneFn = [&]() {
@@ -191,6 +245,23 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 		        })
 		  ];
 	};
+
+	TArray<int32> viewModeEnumsSansOverrides;
+	for (auto e : TEnumRange<EWfcTilesetEditorMode>{ })
+		switch (e)
+		{
+			case EWfcTilesetEditorMode::Tile:
+			case EWfcTilesetEditorMode::Permutations:
+			case EWfcTilesetEditorMode::Matches:
+			case EWfcTilesetEditorMode::Generation:
+				viewModeEnumsSansOverrides.Add(static_cast<int32>(e));
+			break;
+			
+			case EWfcTilesetEditorMode::OverrideGeneration:
+			break;
+
+			default: check(false);
+		}
 
 	//Pointers for lambdas to capture:
 	auto* scenePtr = &GetScene();
@@ -243,22 +314,99 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 		reinterpret_cast<uint8_t*>(&GetScene().GenerationSettings)
 	);
 	editorForGeneratorSettings->SetStructureData(MakeShareable(scopedGeneratorSettingsStruct));
-	
+
 	return SAssignNew(tileSelectorTab, SDockTab)
 			.Icon(FEditorStyle::GetBrush("GenericEditor.Tabs.Properties"))
 			.Label(LOCTEXT("EditorSettingsTabLabel", "Editor Settings"))
 			.TabColorScale(GetTabColorScale())
 			[
 				SNew(SScrollBox)
+				
+				//Checkbox: "Try generating from initial state asset"
+				+ SScrollBox::Slot()
+				[
+					SNew(SCheckBox)
+						.IsChecked_Lambda([&]() {
+							return GetScene().Mode == EWfcTilesetEditorMode::OverrideGeneration ? ECheckBoxState::Checked : ECheckBoxState::Unchecked;
+						})
+						.OnCheckStateChanged_Lambda([&](ECheckBoxState newState) {
+							if (newState == ECheckBoxState::Checked)
+							{
+								lastNonOverriddenMode = GetScene().Mode;
+								GetScene().Mode = EWfcTilesetEditorMode::OverrideGeneration;
+							}
+							else if (newState == ECheckBoxState::Unchecked)
+							{
+								GetScene().Mode = lastNonOverriddenMode;
+							}
+						})
+					[
+						SNew(STextBlock)
+							.Text(LOCTEXT("GenerateFromInitialSettingsAsset", "Generate from Initial Settings asset"))
+					]
+				]
+
+				//Editor to select an Initial State asset for override-generation
+				+ SScrollBox::Slot()
+				[
+					//For some reason the property window isn't displaying the asset,
+					//    so we need to add a label that does the job.
+					
+					SNew(SHorizontalBox)
+					  .Visibility_Lambda(showIfOverrideGeneratingFn)
+					
+					+ SHorizontalBox::Slot()
+					  .FillWidth(1.0f)
+					[
+						SNew(SObjectPropertyEntryBox)
+							.OnObjectChanged_Lambda([&](const FAssetData& newAsset) {
+								if (newAsset.IsValid())
+									initialGeneratorState = CastChecked<UWfcGeneratorInitialState>(newAsset.GetAsset());
+								else
+									initialGeneratorState = nullptr;
+							})
+							.AllowedClass(UWfcGeneratorInitialState::StaticClass())
+							.DisplayUseSelected(false)
+							.DisplayBrowse(true)
+							.DisplayThumbnail(false)
+							.AllowCreate(false)
+							.AllowClear(true)
+					]
+					
+					+ SHorizontalBox::Slot()
+					  .AutoWidth()
+					[
+						SNew(SSpacer)
+							.Size(FVector2D{ 25, 1 })
+					]
+					
+					+ SHorizontalBox::Slot()
+					  .FillWidth(2.0f)
+					[
+						SNew(STextBlock)
+							.Text_Lambda([&]() {
+								if (IsValid(initialGeneratorState))
+									return FText::FromString(initialGeneratorState->GetPathName());
+								else
+									return FText::GetEmpty();
+							})
+					]
+				]
+
+				//Tile selector dropdown
 				+ SScrollBox::Slot()
 				[
 				    SAssignNew(tileSelector, STextComboBox)
+						.Visibility_Lambda(showIfNotOverrideGeneratingFn)
 				        .OptionsSource(&tilesetTileSelectorChoices)
 				        .OnSelectionChanged(this, &FWfcTilesetEditor::OnTileSelected)
 				]
+
+				//View mode dropdown
 				+ SScrollBox::Slot()
 				[
 					SNew(SHorizontalBox)
+						.Visibility_Lambda(showIfNotOverrideGeneratingFn)
 					+ SHorizontalBox::Slot()
 						.HAlign(HAlign_Left)
 					[
@@ -269,6 +417,7 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 					+ SHorizontalBox::Slot()
 					[
 						SNew(SEnumComboBox, StaticEnum<EWfcTilesetEditorMode>())
+						  .EnumValueSubset(viewModeEnumsSansOverrides)
 						  .CurrentValue_Lambda([&]() {
 						      return static_cast<int32>(GetScene().Mode);
 						  })
@@ -277,6 +426,8 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 						  })
 					]
 				]
+
+				//Other display settings
 				+ SScrollBox::Slot()
 				[
 					SNew(SHorizontalBox)
@@ -288,6 +439,7 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 								case EWfcTilesetEditorMode::Matches:
 								case EWfcTilesetEditorMode::Permutations:
 								case EWfcTilesetEditorMode::Generation:
+								case EWfcTilesetEditorMode::OverrideGeneration:
 									return EVisibility::Visible;
 								
 								default:
@@ -295,6 +447,8 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 									return EVisibility::Hidden;
 							}
 						})
+
+					//Tile separation:
 					+ SHorizontalBox::Slot()
 					[
 						SNew(STextBlock)
@@ -307,7 +461,33 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 						  .Value_Lambda([&]() { return GetScene().SpacingBetweenTiles; })
 						  .OnValueCommitted_Lambda([&](float f, ETextCommit::Type) { GetScene().SpacingBetweenTiles = f; })
 					]
+
+					//Generator shows face constraints:
+					+ SHorizontalBox::Slot()
+					[
+						SNew(SSpacer)
+						  .Visibility_Lambda(showIfGeneratingOrOverrideFn)
+						  .Size(FVector2D{ 20, 1 })
+					]
+					+ SHorizontalBox::Slot()
+					[
+						SNew(STextBlock)
+						  .Visibility_Lambda(showIfGeneratingOrOverrideFn)
+						  .Text(LOCTEXT("GenShowFaceConstraintsLabel", "Show face constraints"))
+					]
+					+ SHorizontalBox::Slot()
+					[
+						SNew(SCheckBox)
+						  .Visibility_Lambda(showIfGeneratingOrOverrideFn)
+						  .IsChecked_Lambda([&]() { return GetScene().DisplayFaceConstraintsInGeneration ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+						  .OnCheckStateChanged_Lambda([&](ECheckBoxState newState) {
+						      GetScene().DisplayFaceConstraintsInGeneration =
+						      	(newState == ECheckBoxState::Checked);
+						  })
+					]
 				]
+
+				//Match Face selection grid
 				+ SScrollBox::Slot()
 				[
 					SNew(STextBlock)
@@ -334,22 +514,28 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 						  + SGridPanel::Slot(2, 1).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MaxZ) ]
 					]
 				]
+
+				//Match Permutation editor
 				+ SScrollBox::Slot()
 				[
 					SNew(SHorizontalBox)
 					    .Visibility_Lambda(showIfMatchingFn)
 					+ SHorizontalBox::Slot() [ editorForPermutationToMatch->GetWidget()->AsShared() ]
 				]
+				
+				//Generator settings editor
 				+ SScrollBox::Slot()
 				[
 					SNew(SHorizontalBox)
-						.Visibility_Lambda(showIfGeneratingFn)
+						.Visibility_Lambda(showIfGeneratingNotOverrideFn)
 					+ SHorizontalBox::Slot() [ editorForGeneratorSettings->GetWidget()->AsShared() ]
 				]
+
+				//Generator tick execution/rewind
 				+ SScrollBox::Slot()
 				[
 					SNew(SHorizontalBox)
-						.Visibility_Lambda(showIfGeneratingFn)
+						.Visibility_Lambda(showIfGeneratingOrOverrideFn)
 					+ SHorizontalBox::Slot()
 					[
 						SNew(STextBlock)
@@ -384,7 +570,13 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 					+ SHorizontalBox::Slot()
 					[
 						SNew(STextBlock)
-							.Text_Lambda([&]() { return FText::FromString(FString::Printf(TEXT("(%i)"), GetScene().GetGeneratorManager()->GetGenerator()->GetHistoryLength())); })
+							.Text_Lambda([&]() {
+								auto* generatorManager = GetScene().GetGeneratorManager();
+								if (generatorManager && generatorManager->GetGenerator())
+									return FText::FromString(FString::Printf(TEXT("(%i)"), generatorManager->GetGenerator()->GetHistoryLength()));
+								else
+									return FText::FromString(TEXT("!"));
+							})
 					]
 				]
 			];
@@ -521,12 +713,19 @@ void FWfcTilesetEditor::OnTilesetEdited(const FPropertyChangedEvent& data)
     RefreshTileChoices();
     tileSceneTabBody->GetViewportClient()->Invalidate();
 }
+
 // ReSharper disable once CppMemberFunctionMayBeConst
 void FWfcTilesetEditor::OnSceneTick(float deltaSeconds)
 {
 	auto* viewportClient = tileSceneTabBody->GetViewportClient().Get();
     const auto& camPos = viewportClient->GetViewLocation();
-    tileSceneTabBody->GetScene()->Refresh(tileset, tileToVisualize, camPos, viewportClient);
+	
+    tileSceneTabBody->GetScene()->Refresh(
+    	tileset, tileToVisualize,
+    	camPos,
+    	initialGeneratorState,
+    	viewportClient
+    );
 }
 
 

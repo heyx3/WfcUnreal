@@ -10,6 +10,7 @@
 #include "WfcGenerator.h"
 #include "WfcBpUtils.h"
 #include "WFCpp2UnrealEditor.h"
+#include "Algo/AllOf.h"
 #include "WfcEditorScenes/WfcTileVisualizer.h"
 #include "WfcEditorScenes/WfcTilesetEditorScene.h"
 #include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
@@ -687,16 +688,34 @@ FEditorSceneObject_WfcTileWithMatches::FEditorSceneObject_WfcTileWithMatches(
 }
 
 FEditorSceneObject_WfcGeneration::FEditorSceneObject_WfcGeneration(FWfcTilesetEditorScene& owner,
+																   FWfcTilesetEditorViewportClient& viewportClient,
+																   const FEditorSceneObject_WfcGeneration_Display& display,
+																   const UWfcGeneratorInitialState* initialState,
+																   int nInstantIterations)
+	: FEditorSceneObject_WfcGeneration(owner, viewportClient, display,
+									   (initialState ? initialState->Tileset : nullptr),
+									   initialState ? FEditorSceneObject_WfcGeneration_Settings{
+									   	   initialState->GridSize, initialState->SeedU32,
+									   	   nInstantIterations,
+									   	   initialState->TemperatureClearGrowthRateT,
+									   	   initialState->Fuzziness,
+									   	   initialState->MaxUnwinding,
+									   	   initialState->PeriodicX, initialState->PeriodicY, initialState->PeriodicZ,
+									   	   initialState->Constraints
+									   } : FEditorSceneObject_WfcGeneration_Settings{ })
+{
+	
+}
+FEditorSceneObject_WfcGeneration::FEditorSceneObject_WfcGeneration(FWfcTilesetEditorScene& owner,
 																   FWfcTilesetEditorViewportClient& _viewportClient,
-															       const FTransform& tr,
-																   double extraSpacingBetweenTiles,
+																   const FEditorSceneObject_WfcGeneration_Display& display,
 																   const UWfcTileset* _tileset,
 																   const FEditorSceneObject_WfcGeneration_Settings& _settings)
     : FEditorSceneObject(&owner),
 	  viewportClient(&_viewportClient), tileset(_tileset)
-	  //Other fields will be set up in RefreshViz(), called deeper inside
+	  //Other fields will be set up by function calls
 {
-	ChangeSpace(tr, extraSpacingBetweenTiles, false);
+	ChangeSpace(display, false);
 	RefreshSettings(_settings);
 }
 void FEditorSceneObject_WfcGeneration::RefreshSettings(const FEditorSceneObject_WfcGeneration_Settings& newSettings)
@@ -714,7 +733,10 @@ void FEditorSceneObject_WfcGeneration::RefreshSettings(const FEditorSceneObject_
 		
 		generator = NewObject<UWfcGenerator>();
 		generator->Start(tileset.Get(), currentSettings.Resolution, currentSettings.Seed,
-					     currentSettings.TemperatureClearGrowthRateT, currentSettings.Fuzziness);
+					     currentSettings.TemperatureClearGrowthRateT, currentSettings.Fuzziness,
+					     currentSettings.MaxUnwinding,
+					     currentSettings.PeriodicX, currentSettings.PeriodicY, currentSettings.PeriodicZ);
+		generator->AddConstraints(currentSettings.InitialConstraints);
 		currentUnsolvableCellCounts.Empty();
 		generatorHistoryOfUnsolvableCellCounts.Empty();
 
@@ -766,16 +788,17 @@ void FEditorSceneObject_WfcGeneration::RefreshViz()
 	unsetCells.Empty();
 	if (!tileset.IsValid() || !generator)
 		return;
-	
+
 	//Update the visualized generator bounds.
-	auto areaExtent = generatorTr.GetScale3D() * FVector{ currentSettings.Resolution } * tileSeparation / 2.0f;
+	auto areaExtent = currentDisplay.Transform.GetScale3D() *
+					    FVector{ currentSettings.Resolution } * tileSeparation / 2.0f;
 	areaBox = {
 		Owner,
 		FBox{
-			generatorTr.GetLocation() - areaExtent,
-			generatorTr.GetLocation() + areaExtent
+			currentDisplay.Transform.GetLocation() - areaExtent,
+			currentDisplay.Transform.GetLocation() + areaExtent
 		},
-		generatorTr.Rotator(),
+		currentDisplay.Transform.Rotator(),
 		(generator->IsRunning() ?
 			FLinearColor{ 0, 0, 0, 1 } :
 			FLinearColor{ 0.4, 1, 0.4, 1 }
@@ -793,8 +816,8 @@ void FEditorSceneObject_WfcGeneration::RefreshViz()
 	);
 	
 	//Visualize each cell.
-	auto areaWorldSize = generatorTr.GetScale3D() * FVector{ currentSettings.Resolution } *
-						   tileSeparation;
+	auto areaWorldSize = currentDisplay.Transform.GetScale3D() *
+					        FVector{ currentSettings.Resolution } * tileSeparation;
 	for (int z = 0; z < currentSettings.Resolution.Z; ++z)
 		for (int y = 0; y < currentSettings.Resolution.Y; ++y)
 			for (int x = 0; x < currentSettings.Resolution.X; ++x)
@@ -814,8 +837,10 @@ void FEditorSceneObject_WfcGeneration::RefreshViz()
 					FTransform{
 						-areaWorldSize / 2.0f
 					},
-					generatorTr
+					currentDisplay.Transform
 				);
+				
+				auto [cellData, cellUserData] = generator->GetCellWithPtr({ x, y, z });
 
 				//Set up a viz of how many times this cell got cleared in the last round of ticks.
 				TArray<FEditorWireBoxComponent> unsolvableViz;
@@ -838,7 +863,28 @@ void FEditorSceneObject_WfcGeneration::RefreshViz()
 					unsolvableViz.Last().GetComponent()->SetLineThickness(lineThickness);
 				}
 
-				auto [cellData, cellUserData] = generator->GetCellWithPtr({ x, y, z });
+				//Set up a viz of faces whose values are certain.
+				decltype(FUnsetCell::FaceConstraintsViz) faceConstraintsViz;
+				if (!cellData.IsSet && currentDisplay.ShowFaceConstraints)
+				{
+					for (auto dir : TEnumRange<WFC_Directions3D>{ })
+					{
+						auto faceConstraint = generator->GetFacePossibility({ x, y, z }, dir);
+						if (faceConstraint.IsSet())
+						{
+							const auto& [facePrototypeID, facePermutation] = *faceConstraint;
+							faceConstraintsViz[static_cast<int>(dir)].Emplace(
+								Owner,
+								cellWorldTr, tileset->TileLength / 2.0,
+								dir, tileset->FacePrototypes[facePrototypeID], facePermutation,
+								FEditorSceneObject_WfcFace_Settings{
+									0.2f, false
+								}
+							);
+						}
+					}
+				}
+
 				if (cellData.IsSet)
 				{
 					auto& debugTileData = tileset->Tiles[cellData.IfSet.TileID].Data.Get<FWfcGameData>();
@@ -902,7 +948,8 @@ void FEditorSceneObject_WfcGeneration::RefreshViz()
 								EHTA_Center, EVRTA_TextBottom
 							},
 							NullOpt,
-							MoveTemp(unsolvableViz)
+							MoveTemp(unsolvableViz),
+							std::move(faceConstraintsViz)
 						})
 					);
 					cellViz.EntropyViz->GetComponent()->SetWorldSize(tileset->TileLength / 100);
@@ -923,22 +970,21 @@ void FEditorSceneObject_WfcGeneration::RefreshViz()
 					    		),
 					    		FLinearColor{ 0.8f, 0.6f, 0.3f }.ToFColorSRGB()
 					    	},
-							MoveTemp(unsolvableViz)
+					    	MoveTemp(unsolvableViz),
+							std::move(faceConstraintsViz)
 					    })
 					);
 				}
 			}
 }
-void FEditorSceneObject_WfcGeneration::ChangeSpace(const FTransform& tr, double extraSpacingBetweenTiles,
+void FEditorSceneObject_WfcGeneration::ChangeSpace(const FEditorSceneObject_WfcGeneration_Display& newDisplay,
 												   bool immediateRedraw)
 {
-	bool anyChanges = false;
+	float newTileSeparation = newDisplay.ExtraSpacing + (tileset.IsValid() ? tileset->TileLength : 0.0);
+	bool anyChanges = (currentDisplay != newDisplay) ||
+				      (newTileSeparation != tileSeparation);
 
-	anyChanges |= !tr.Equals(generatorTr, 0.0);
-	generatorTr = tr;
-
-	float newTileSeparation = extraSpacingBetweenTiles + (tileset.IsValid() ? tileset->TileLength : 0.0);
-	anyChanges |= (tileSeparation != newTileSeparation);
+	currentDisplay = newDisplay;
 	tileSeparation = newTileSeparation;
 	
 	if (immediateRedraw && anyChanges)

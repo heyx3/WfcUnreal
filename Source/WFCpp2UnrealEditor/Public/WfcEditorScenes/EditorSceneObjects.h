@@ -7,6 +7,7 @@
 #include "WfcFacePrototype.h"
 #include "WfcTilesetEditorViewportClient.h"
 #include "WfcTileVisualizer.h"
+#include "WfcConstraintHistory.h"
 
 #include "EditorSceneObjects.generated.h"
 
@@ -69,11 +70,13 @@ public:
 	//Use a low value for tilesets that produce many small errors requiring limited clearing.
 	UPROPERTY(EditAnywhere, meta=(UIMin=0, UIMax=1))
 	float TemperatureClearGrowthRateT = 0.1f;
-	
 	//The amount of randomness in which cells get set first.
 	//If set to 0, the algorithm always picks (randomly) from the cells with the fewest number of options.
 	UPROPERTY(EditAnywhere)
 	float Fuzziness = 0.1f;
+
+	UPROPERTY(EditAnywhere, meta=(ClampMin=0))
+	int MaxUnwinding = 0;
 
 	UPROPERTY(EditAnywhere, AdvancedDisplay)
 	bool PeriodicX = false;
@@ -81,6 +84,9 @@ public:
 	bool PeriodicY = false;
 	UPROPERTY(EditAnywhere, AdvancedDisplay)
 	bool PeriodicZ = false;
+
+	UPROPERTY(EditAnywhere, AdvancedDisplay)
+	TArray<TInstancedStruct<FWfcConstraintEntry>> InitialConstraints;
 
 	
 	//Returns true if the given settings represents the same generator as this one
@@ -90,14 +96,17 @@ public:
 		return Resolution == other.Resolution && Seed == other.Seed &&
 			   TemperatureClearGrowthRateT == other.TemperatureClearGrowthRateT &&
 			   Fuzziness == other.Fuzziness &&
+			   MaxUnwinding == other.MaxUnwinding &&
 			   PeriodicX == other.PeriodicX &&
 			   PeriodicY == other.PeriodicY &&
-			   PeriodicZ == other.PeriodicZ;
+			   PeriodicZ == other.PeriodicZ &&
+			   InitialConstraints == other.InitialConstraints;
 	}
 };
 inline bool operator==(const FEditorSceneObject_WfcGeneration_Settings& a, const FEditorSceneObject_WfcGeneration_Settings& b)
 {
-	return a.IsSameGeneratorAs(b) && a.ImmediatelyRunIterations == b.ImmediatelyRunIterations;
+	return a.IsSameGeneratorAs(b) &&
+		   a.ImmediatelyRunIterations == b.ImmediatelyRunIterations;
 }
 template<> struct TStructOpsTypeTraits<FEditorSceneObject_WfcGeneration_Settings> : public TStructOpsTypeTraitsBase2<FEditorSceneObject_WfcGeneration_Settings>
 {
@@ -105,6 +114,39 @@ template<> struct TStructOpsTypeTraits<FEditorSceneObject_WfcGeneration_Settings
 	{
 		WithZeroConstructor = true,
 		WithNoDestructor = true,
+		WithIdenticalViaEquality = true
+	};
+};
+
+USTRUCT()
+struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcGeneration_Display
+{
+	GENERATED_BODY()
+public:
+
+	UPROPERTY(EditAnywhere)
+	float ExtraSpacing = 0;
+
+	UPROPERTY(EditAnywhere)
+	FTransform Transform;
+
+	UPROPERTY(EditAnywhere)
+	bool ShowFaceConstraints = false;
+
+	bool operator==(const FEditorSceneObject_WfcGeneration_Display& other) const
+	{
+		return ExtraSpacing == other.ExtraSpacing &&
+			   Transform.Equals(other.Transform) &&
+			   ShowFaceConstraints == other.ShowFaceConstraints;
+	}
+};
+template<> struct TStructOpsTypeTraits<FEditorSceneObject_WfcGeneration_Display> : public TStructOpsTypeTraitsBase2<FEditorSceneObject_WfcGeneration_Display>
+{
+	using TrTT = TStructOpsTypeTraits<FTransform>;
+	enum
+	{
+		WithZeroConstructor = TrTT::WithZeroConstructor,
+		WithNoDestructor = TrTT::WithNoDestructor,
 		WithIdenticalViaEquality = true
 	};
 };
@@ -251,9 +293,13 @@ struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcGeneration : public FEditorS
 public:
 
 	FEditorSceneObject_WfcGeneration(FWfcTilesetEditorScene& owner, FWfcTilesetEditorViewportClient& viewportClient,
-									 const FTransform& tr, double extraSpacingBetweenTiles,
+									 const FEditorSceneObject_WfcGeneration_Display& display,
 									 const UWfcTileset* tileset,
 									 const FEditorSceneObject_WfcGeneration_Settings& settings);
+	FEditorSceneObject_WfcGeneration(FWfcTilesetEditorScene& owner, FWfcTilesetEditorViewportClient& viewportClient,
+									 const FEditorSceneObject_WfcGeneration_Display& display,
+									 const class UWfcGeneratorInitialState* initialState,
+									 int immediatelyRunNIterations = 0);
 
 	//Remakes this instance to match the given settings.
 	//Attempts to optimize the operation if the change is small
@@ -266,12 +312,15 @@ public:
 	//You must first check the generator to see if any history exists.
 	void Rewind();
 
-	//Updates the transform data for this generator sim, without having to restart the generator.
-	//Skips redrawing this object if nothing actually changed.
-	void ChangeSpace(const FTransform& tr, double extraSpacingBetweenTiles, bool immediateRedraw = true);
+	//Updates the display settings for this generator sim, without having to restart the generator.
+	//Always skips redrawing this object if nothing actually changed.
+	void ChangeSpace(const FEditorSceneObject_WfcGeneration_Display& newDisplay,
+					 bool immediateRedraw = true);
 	
 	
 	const class UWfcGenerator* GetGenerator() const { return generator; }
+	class UWfcGenerator* GetGenerator() { return generator; }
+	const auto& GetCurrentSettings() const { return currentSettings; }
 
 private:
 
@@ -282,8 +331,8 @@ private:
 	TMap<FIntVector, int> currentUnsolvableCellCounts;
 	TArray<TMap<FIntVector, int>> generatorHistoryOfUnsolvableCellCounts;
 
-	FTransform generatorTr;
 	FEditorSceneObject_WfcGeneration_Settings currentSettings;
+	FEditorSceneObject_WfcGeneration_Display currentDisplay;
 	double tileSeparation;
 
 	int nIterations = 0;
@@ -303,6 +352,7 @@ private:
 		TOptional<FEditorTextComponent> EntropyViz;
 		TOptional<FEditorWireSphereComponent> BoringViz;
 		TArray<FEditorWireBoxComponent> ClearedViz;
+		TStaticArray<TOptional<FEditorSceneObject_WfcFace>, WFC::Tiled3D::N_DIRECTIONS_3D> FaceConstraintsViz;
 	};
 	TMap<FIntVector3, FUnsetCell> unsetCells;
 

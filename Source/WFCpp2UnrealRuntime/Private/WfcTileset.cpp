@@ -1,5 +1,8 @@
 ﻿#include "WfcTileset.h"
 
+#include "WfcConstraintHistory.h"
+#include "WFCpp2UnrealRuntime.h"
+
 
 int UWfcTileset::GetTileIDForData(const TInstancedStruct<FWfcGameData>& targetData, bool& foundTile) const
 {
@@ -57,6 +60,7 @@ void UWfcTileset::Unwrap(Unwrapped& output) const
 	output.WfcTileIDs.Empty();
 	output.WfcTileIDByUnrealID.Empty();
 	output.WfcFacePrototypeFirstIDs.Empty();
+    output.FacePrototypesByWfcPoint.Empty();
 	output._supportedTransforms.Empty();
 	output._sortedUnrealIDs.Empty();
 	
@@ -66,6 +70,9 @@ void UWfcTileset::Unwrap(Unwrapped& output) const
     for (const auto& facePrototype : FacePrototypes)
     {
         output.WfcFacePrototypeFirstIDs.Add(facePrototype.Get<0>(), nextPointID);
+        for (int offset = 0; offset < 4; ++offset)
+            output.FacePrototypesByWfcPoint.Add(nextPointID + offset, facePrototype.Get<0>());
+        
         nextPointID += 4;
     }
     //In case a nonexistent face prototype is referenced, keep a special hidden null face around.
@@ -123,6 +130,45 @@ void UWfcTileset::Unwrap(Unwrapped& output) const
         }
     }
 }
+
+TOptional<TTuple<WfcFacePrototypeID, WFC_Transforms2D>>
+    UWfcTileset::Unwrapped::ToUnrealFace(const WFC::Tiled3D::FacePermutation& wfcFace,
+                                         const UWfcTileset* tileset) const
+{
+    auto* facePrototypeID = FacePrototypesByWfcPoint.Find(wfcFace.Points.Corners[0]);
+    if (!facePrototypeID)
+    {
+        UE_LOG(LogWFCpp, Error, TEXT("No face-prototype could be found with the point ID's you gave!"));
+        return NullOpt;
+    }
+    
+    //Getting the permutation is a bit tricky; apply every possible permutation and wait for a match.
+    TOptional<WFC_Transforms2D> facePermutation;
+    for (WFC_Transforms2D tr2D : TEnumRange<WFC_Transforms2D>{ })
+    {
+        auto permutedFacePrototype = FWfcConstraintEntry_Face::UnwrapFacePermutation(
+            static_cast<WFC_Directions3D>(wfcFace.Side), tr2D,
+            tileset->FacePrototypes[*facePrototypeID],
+            WfcFacePrototypeFirstIDs[*facePrototypeID]
+        );
+        if (permutedFacePrototype == wfcFace.Points)
+        {
+            facePermutation = tr2D;
+            break;
+        }
+    }
+    if (!facePermutation.IsSet())
+    {
+        UE_LOG(LogWFCpp, Error,
+               TEXT("No permutation matches this WFC face to face-prototype %i! "
+                      "Your data must be malformed"),
+               *facePrototypeID);
+        return NullOpt;
+    }
+
+    return MakeTuple(*facePrototypeID, *facePermutation);
+}
+
 
 UWfcTileset* UWfcTilesetGenerator::Generate(UObject* outer, FName name) const
 {

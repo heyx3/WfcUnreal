@@ -2,6 +2,7 @@
 
 #include "WFCpp2.h"
 #include "WfcTileset.h"
+#include "WfcConstraintHistory.h"
 
 #include "WfcGenerator.generated.h"
 
@@ -82,6 +83,14 @@ public:
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
 	FIntVector GetGridSize() const;
+	
+	//Creates a data-object reprsenting this generator's startup parameters,
+	//    including any constraints you've set.
+	UFUNCTION(BlueprintCallable, BlueprintPure=false, Category="WFC/Algorithm")
+	class UWfcGeneratorInitialState* SerializeInitialState(UObject* owner = nullptr,
+														   FName name = NAME_None,
+														   bool isTransient = true) const;
+	
     //Returns a progress indicator from 0 to 1.
     UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
 	float GetProgress() const;
@@ -111,7 +120,10 @@ public:
 		return o;
 	}
 
-	//TODO: More ways to get information about the algorithm
+	//Gets the history of all constraints you have passed to this generator.
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
+	const TArray<TInstancedStruct<FWfcConstraintEntry>>& GetConstraintHistory() const { return constraintsInOrder; }
+	
 
 	//-----------------
 	//  Result queries
@@ -135,6 +147,34 @@ public:
 	UFUNCTION(BlueprintCallable, Category="WFC/Algorithm")
 	void GetTemperatureData(float& min, float& max,
 		  				    float& mean, float& median);
+	
+	//For the given cell face, if it can only be one kind of face,
+	//    returns that face.
+	//Note that if a face has symmetries,
+	//    then the specific permutation returned is arbitrary but deterministic.
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
+	void GetFacePossibility(const FIntVector& cell, WFC_Directions3D face,
+							bool& exists, int& facePrototypeId, WFC_Transforms2D& facePermutation) const
+	{
+		auto result = GetFacePossibility(cell, face);
+		exists = result.IsSet();
+		if (exists)
+		{
+			facePrototypeId = result->Get<0>();
+			facePermutation = result->Get<1>();
+		}
+		else
+		{
+			facePrototypeId = -1;
+			facePermutation = WFC_Transforms2D::None;
+		}
+	}
+	//For the given cell face, if it can only be one kind of face,
+	//    returns that face (as its prototype ID and permutation).
+	//Note that if a face has symmetries,
+	//    then the specific permutation returned is arbitrary but deterministic.
+	TOptional<TTuple<int, WFC_Transforms2D>> GetFacePossibility(FIntVector cell,
+																WFC_Directions3D face) const;
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
 	int GetTickCount() const { return static_cast<int>(state->CurrentTimestamp); }
@@ -150,7 +190,7 @@ public:
 	int GetTicksSinceLastSave() const;
 
 	//Mainly intended for debugging.
-	const auto& GetHistoryBuffer() const { return stateHistoryBuffer; }
+	const auto& GetStateHistoryBuffer() const { return stateHistoryBuffer; }
 	//Mainly intended for debugging.
 	const auto* UnwrapStandardRunner() const { return state.GetPtrOrNull(); }
 
@@ -161,7 +201,6 @@ public:
 	
 	//Kicks off the WFC algorithm with the given inputs.
     //If the algorithm was already running, that previous run will be canceled.
-	//Note that if 'clearSize' is set to zero, then WFC will fail if it encounters an unsolvable grid cell.
 	UFUNCTION(BlueprintCallable, Category="WFC/Ops", meta=(AdvancedDisplay=5))
 	void Start(const UWfcTileset* tiles, const FIntVector& gridSize,
 	           int seedU32 = 1234567890,
@@ -248,7 +287,12 @@ public:
 		else
 			SetFace(cell, face, facePrototypeId, facePermutationOrientation);
 	}
+	
+	//Applies a set of constraints to this generator, in order.
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
+	void AddConstraints(const TArray<TInstancedStruct<FWfcConstraintEntry>>& constraints);
 
+	
 	//Stops running the generator, leaving unset cells as permanently unsolved.
 	UFUNCTION(BlueprintCallable, Category="WFC/Ops")
 	void Stop();
@@ -283,7 +327,10 @@ public:
 	
 private:
     UPROPERTY()
-    const UWfcTileset* tileset;
+    const UWfcTileset* tileset = nullptr;
+	UPROPERTY()
+	UWfcGeneratorInitialState* initialState = nullptr;
+	
 	UWfcTileset::Unwrapped wfcLibraryData;
     
 	WfcSimState status = WfcSimState::Off;
@@ -291,4 +338,82 @@ private:
 	TOptional<WFC::Tiled3D::StandardRunner> state;
 	TArray<WFC::Tiled3D::StandardRunner> stateHistoryBuffer;
 
+	TArray<TInstancedStruct<FWfcConstraintEntry>> constraintsInOrder;
+};
+
+
+//A serialized initial state for a WFC generator, including constraints.
+UCLASS(BlueprintType)
+class WFCPP2UNREALRUNTIME_API UWfcGeneratorInitialState : public UObject
+{
+	GENERATED_BODY()
+public:
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	const UWfcTileset* Tileset = nullptr;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool PeriodicX = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool PeriodicY = false;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	bool PeriodicZ = false;
+	
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FIntVector GridSize = { 0, 0, 0 };
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	int SeedU32 = 0;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	TArray<TInstancedStruct<FWfcConstraintEntry>> Constraints;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	float TemperatureClearGrowthRateT = 0.5f;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	float Fuzziness = 0.1f;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	int MaxUnwinding = 0;
+
+
+	UFUNCTION(BlueprintCallable)
+	static UWfcGeneratorInitialState* MakeInitialWfcState(const UWfcTileset* theTileset,
+														  FIntVector theGridSize, int u32Seed,
+														  bool periodicAlongX, bool periodicAlongY, bool periodicAlongZ,
+														  const TArray<TInstancedStruct<FWfcConstraintEntry>> theConstraints,
+														  float theTempClearGrowthRateT, float randFuzziness,
+														  int maxUnwindingCount,
+														  UObject* owner = nullptr,
+														  FName name = NAME_None,
+														  bool isTransient = true);
+	UFUNCTION(BlueprintCallable, BlueprintPure)
+	static bool CompareWfcInitialStates(const UWfcGeneratorInitialState* a, const UWfcGeneratorInitialState* b);
+	
+	//Starts a new generator from this initial state.
+	UFUNCTION(BlueprintCallable, BlueprintPure=false)
+	UWfcGenerator* StartGenerator(UObject* owner = nullptr,
+								  bool isTransient = true) const
+	{
+		auto* gen = NewObject<UWfcGenerator>(owner, NAME_None, isTransient ? RF_Transient : RF_NoFlags);
+		RestartGenerator(gen);
+		return gen;
+	}
+	
+	//Starts a new generator from this initial state.
+	UFUNCTION(BlueprintCallable, BlueprintPure=false)
+	void RestartGenerator(UWfcGenerator* generatorToUse) const;
+
+	//Saves this object as a new project asset, returning that asset copy.
+	//Does nothing outside the editor.
+	UFUNCTION(BlueprintCallable, CallInEditor)
+	UWfcGeneratorInitialState* SaveAsAsset(const FString& pathWithinContentFolder,
+										   bool highlightAsset)
+	{
+		return SaveAsAsset(pathWithinContentFolder,
+						   UEngine::FCopyPropertiesForUnrelatedObjectsParams{ },
+						   highlightAsset);
+	}
+	//Saves this object as a new project asset, returning that asset copy.
+	//Does nothing outside the editor.
+	UWfcGeneratorInitialState* SaveAsAsset(const FString& pathWithinContentFolder,
+										   const UEngine::FCopyPropertiesForUnrelatedObjectsParams& copyParams,
+										   bool highlightAsset);
 };

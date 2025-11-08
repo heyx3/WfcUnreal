@@ -1,13 +1,14 @@
 ﻿#pragma once
 
-#include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
 #include "Widgets/SCompoundWidget.h"
+#include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
+
 
 //Based on this wonderful tutorial:
 //  https://easycomplex-tech.com/blog/Unreal/AssetEditor/UEAssetEditorDev-AssetEditorPreview/
 
 //Slate widget representing the contents of the "3D tile visualization" tab.
-class SWfcTilesetTabBody : public SCompoundWidget
+class WFCPP2UNREALEDITOR_API SWfcTilesetTabBody : public SCompoundWidget
 {
     SLATE_BEGIN_ARGS(SWfcTilesetTabBody) { }
     SLATE_END_ARGS()
@@ -17,7 +18,7 @@ public:
 public:
     TSharedPtr<class FWfcTilesetEditorViewportClient> GetViewportClient() const { return viewportClient; }
     TSharedPtr<class SWfcTilesetEditorViewport> GetViewportWidget() const { return viewportWidget; }
-    class FWfcTilesetEditorScene* GetScene() const { return static_cast<FWfcTilesetEditorScene*>(viewportClient->GetPreviewScene()); }
+    class FWfcTilesetEditorScene* GetScene() const;
 
 private:
     TSharedPtr<class FWfcTilesetEditorViewportClient> viewportClient;

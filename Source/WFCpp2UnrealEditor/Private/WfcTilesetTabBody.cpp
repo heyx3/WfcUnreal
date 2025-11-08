@@ -4,6 +4,12 @@
 #include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
 #include "WfcTilesetEditorViewport.h"
 
+
+FWfcTilesetEditorScene* SWfcTilesetTabBody::GetScene() const
+{
+    return static_cast<FWfcTilesetEditorScene*>(viewportClient->GetPreviewScene());
+}
+
 void SWfcTilesetTabBody::Construct(const FArguments& inArgs)
 {
     viewportWidget = SNew(SWfcTilesetEditorViewport, );

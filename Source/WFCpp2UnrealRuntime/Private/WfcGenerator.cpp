@@ -1,5 +1,11 @@
 ﻿#include "WfcGenerator.h"
 
+#include "AssetToolsModule.h"
+#include "ContentBrowserModule.h"
+#include "IContentBrowserSingleton.h"
+#include "AssetRegistry/AssetRegistryModule.h"
+#include "UObject/SavePackage.h"
+
 #include "WFCpp2UnrealRuntime.h"
 
 
@@ -75,6 +81,19 @@ int UWfcGenerator::GetTicksSinceLastSave() const
 	check(t2 >= t1);
 	return t2 - t1;
 }
+
+UWfcGeneratorInitialState* UWfcGenerator::SerializeInitialState(UObject* owner,
+																FName name,
+																bool isTransient) const
+{
+	//Returning a copy is important because users might mess with their returned instance.
+	return NewObject<UWfcGeneratorInitialState>(
+		owner ? owner : GetTransientPackage(), name,
+		isTransient ? RF_Transient : RF_NoFlags,
+		initialState
+	);
+}
+
 
 FWfcCellStatus UWfcGenerator::GetCell(const FIntVector& cellPos, bool copyInData) const
 {
@@ -194,10 +213,18 @@ void UWfcGenerator::SetCell(const FIntVector& cell,
 		UE_LOG(LogWFCpp, Error, TEXT("Invalid tile ID: %i"), unrealTileID);
 		return;
 	}
-	
+
 	state->SetCell({ cell.X, cell.Y, cell.Z },
 				   wfcLibraryData.WfcTileIDByUnrealID[unrealTileID],
 				   permutation.Unwrap(), permanent);
+	if (permanent)
+	{
+		constraintsInOrder.Add(TInstancedStruct<FWfcConstraintEntry>::Make<FWfcConstraintEntry_Cell>(
+			FWfcConstraintEntry{ },
+			cell, unrealTileID, permutation, false
+		));
+		initialState->Constraints.Add(constraintsInOrder.Last());
+	}
 }
 
 void UWfcGenerator::SetCellNot(const FIntVector& cell,
@@ -222,7 +249,12 @@ void UWfcGenerator::SetCellNot(const FIntVector& cell,
 	
 	state->SetCellConstraintNot({ cell.X, cell.Y, cell.Z },
 							    wfcLibraryData.WfcTileIDByUnrealID[unrealTileID],
-								WFC::Tiled3D::TransformSet::Combine(permutation.Unwrap()));
+							    WFC::Tiled3D::TransformSet::Combine(permutation.Unwrap()));
+	constraintsInOrder.Add(TInstancedStruct<FWfcConstraintEntry>::Make<FWfcConstraintEntry_Cell>(
+		FWfcConstraintEntry{ },
+		cell, unrealTileID, permutation, true
+	));
+	initialState->Constraints.Add(constraintsInOrder.Last());
 }
 
 void UWfcGenerator::SetFace(const FIntVector& cell, WFC_Directions3D face,
@@ -246,32 +278,22 @@ void UWfcGenerator::SetFace(const FIntVector& cell, WFC_Directions3D face,
 	}
 	check(wfcLibraryData.WfcFacePrototypeFirstIDs.Contains(facePrototypeId));
 
-	//Get the face points, with the rotation applied.
-	auto rawPoints = tileset->FacePrototypes[facePrototypeId]
-							  .Unwrap(wfcLibraryData.WfcFacePrototypeFirstIDs[facePrototypeId]);
-	auto permutedPoints = rawPoints;
-	for (auto srcPoint : WFC::Tiled3D::ALL_FACE_POINTS)
-	{
-		auto destCornerPoint = WFC::Tiled3D::TransformFaceCorner(
-			srcPoint,
-			static_cast<WFC::Tiled3D::Directions3D>(face),
-			static_cast<WFC::Transformations>(facePermutationOrientation)
-		);
-		permutedPoints.Corners[destCornerPoint] = rawPoints.Corners[srcPoint];
-
-		auto destEdgePoint = WFC::Tiled3D::TransformFaceEdge(
-			srcPoint,
-			static_cast<WFC::Tiled3D::Directions3D>(face),
-			static_cast<WFC::Transformations>(facePermutationOrientation)
-		);
-		permutedPoints.Edges[destEdgePoint] = rawPoints.Edges[srcPoint];
-	}
+	auto permutedFacePoints = FWfcConstraintEntry_Face::UnwrapFacePermutation(
+		face, facePermutationOrientation,
+		tileset->FacePrototypes[facePrototypeId],
+		wfcLibraryData.WfcFacePrototypeFirstIDs[facePrototypeId]
+	);
 	
 	state->SetFaceConstraint(
 		{ cell.X, cell.Y, cell.Z },
 		static_cast<WFC::Tiled3D::Directions3D>(face),
-		permutedPoints
+		permutedFacePoints
 	);
+	constraintsInOrder.Add(TInstancedStruct<FWfcConstraintEntry>::Make<FWfcConstraintEntry_Face>(
+		FWfcConstraintEntry{ },
+		cell, face, facePrototypeId, facePermutationOrientation, false
+	));
+	initialState->Constraints.Add(constraintsInOrder.Last());
 }
 void UWfcGenerator::SetFaceNot(const FIntVector& cell, WFC_Directions3D face,
 							   int facePrototypeId, WFC_Transforms2D facePermutationOrientation)
@@ -293,33 +315,64 @@ void UWfcGenerator::SetFaceNot(const FIntVector& cell, WFC_Directions3D face,
 		return;
 	}
 
-	//Get the face points, with the rotation applied.
-	auto rawPoints = tileset->FacePrototypes[facePrototypeId]
-			  			    .Unwrap(wfcLibraryData.WfcFacePrototypeFirstIDs[facePrototypeId]);
-	auto permutedPoints = rawPoints;
-	for (auto srcPoint : WFC::Tiled3D::ALL_FACE_POINTS)
-	{
-		auto destCornerPoint = WFC::Tiled3D::TransformFaceCorner(
-			srcPoint,
-			static_cast<WFC::Tiled3D::Directions3D>(face),
-			static_cast<WFC::Transformations>(facePermutationOrientation)
-		);
-		permutedPoints.Corners[destCornerPoint] = rawPoints.Corners[srcPoint];
-
-		auto destEdgePoint = WFC::Tiled3D::TransformFaceEdge(
-			srcPoint,
-			static_cast<WFC::Tiled3D::Directions3D>(face),
-			static_cast<WFC::Transformations>(facePermutationOrientation)
-		);
-		permutedPoints.Edges[destEdgePoint] = rawPoints.Edges[srcPoint];
-	}
+	auto permutedFacePoints = FWfcConstraintEntry_Face::UnwrapFacePermutation(
+		face, facePermutationOrientation,
+		tileset->FacePrototypes[facePrototypeId],
+		wfcLibraryData.WfcFacePrototypeFirstIDs[facePrototypeId]
+	);
 	
 	state->SetFaceConstraintNot(
 		{ cell.X, cell.Y, cell.Z },
 		static_cast<WFC::Tiled3D::Directions3D>(face),
-		permutedPoints
+		permutedFacePoints
 	);
+	constraintsInOrder.Add(TInstancedStruct<FWfcConstraintEntry>::Make<FWfcConstraintEntry_Face>(
+		FWfcConstraintEntry{ },
+		cell, face, facePrototypeId, facePermutationOrientation, true
+	));
+	initialState->Constraints.Add(constraintsInOrder.Last());
 }
+
+void UWfcGenerator::AddConstraints(const TArray<TInstancedStruct<FWfcConstraintEntry>>& constraints)
+{
+	if (!IsRunning())
+	{
+		UE_LOG(LogWFCpp, Error, TEXT("Can't add constraints, because the WFC generator isn't running!"));
+		return;
+	}
+	check(state.IsSet());
+
+	for (const auto& constraintEntry : constraints)
+	{
+		if (constraintEntry.GetScriptStruct() == FWfcConstraintEntry_Face::StaticStruct())
+		{
+			const auto& face = constraintEntry.Get<FWfcConstraintEntry_Face>();
+			SetFaceConstraint(
+				face.Cell, face.Side,
+				face.FacePrototypeId, face.FacePrototypeTransform,
+				face.IsForbidding
+			);
+		}
+		else if (constraintEntry.GetScriptStruct() == FWfcConstraintEntry_Cell::StaticStruct())
+		{
+			const auto& cell = constraintEntry.Get<FWfcConstraintEntry_Cell>();
+			SetCellConstraint(
+				cell.Cell,
+				cell.TileId, cell.TilePermutation,
+				cell.IsForbidding
+			);
+		}
+		else
+		{
+			auto typeName = (constraintEntry.GetScriptStruct() ?
+								constraintEntry.GetScriptStruct()->GetStructCPPName() :
+								FString{ TEXT("[null]") });
+			UE_LOG(LogWFCpp, Error,
+				   TEXT("Unhandled FWfcConstraintEntry type! Constraint will be ignored. %s"), *typeName);
+		}
+	}
+}
+
 
 int UWfcGenerator::GetNTilePossibilities() const
 {
@@ -356,9 +409,69 @@ void UWfcGenerator::GetTemperatureData(float& out_min, float& out_max,
 	out_median = (sortedValues.IsEmpty() ? 0 : sortedValues[sortedValues.Num() / 2]);
 }
 
+TOptional<TTuple<int, WFC_Transforms2D>> UWfcGenerator::GetFacePossibility(FIntVector cellPos,
+																		   WFC_Directions3D face) const
+{
+	if (!state)
+	{
+		UE_LOG(LogWFCpp, Error,
+			   TEXT("Tried to call UWfcGenerator::GetFacePossibility before the generator is running!"));
+		return NullOpt;
+	}
+
+	//Wrap the given cell coordinate if applicable, then check that it's valid.
+	auto cellPosWfc = state->Grid.FilterPos({ cellPos.X, cellPos.Y, cellPos.Z });
+	cellPos = { cellPosWfc.x, cellPosWfc.y, cellPosWfc.z };
+	if (!state->Grid.Cells.IsIndexValid({ cellPos.X, cellPos.Y, cellPos.Z }))
+	{
+		UE_LOG(
+			LogWFCpp, Error,
+			TEXT("Your cell pos %s is out of range of the grid (size %s)!"),
+			*cellPos.ToString(),
+			*FIntVector(state->Grid.Cells.GetWidth(),
+					    state->Grid.Cells.GetHeight(),
+						state->Grid.Cells.GetDepth()).ToString()
+		);
+		return NullOpt;
+	}
+
+	//Helper function that actually finds the Unreal face data.
+	auto generateResult = [&](WFC::Tiled3D::TileIdx tile, WFC::Tiled3D::Transform3D tilePermutation) {
+		auto permutedCube = tilePermutation.ApplyToCube(state->Grid.InputTiles[tile].Data);
+		auto permutedFace = permutedCube.Faces[permutedCube.GetFace(static_cast<WFC::Tiled3D::Directions3D>(face))];
+		return wfcLibraryData.ToUnrealFace(permutedFace, tileset);
+	};
+	
+	//If the cell is already set, just grab its current face.
+	//This isn't merely an optimization: the usual lookup is undefined after a cell is set.
+	const auto& cell = state->Grid.Cells[{ cellPos.X, cellPos.Y, cellPos.Z }];
+	if (cell.IsSet())
+		return generateResult(cell.ChosenTile, cell.ChosenPermutation);
+	
+	//Look for the supported face on that cell;
+	//    if we find a second one then immediately give up.
+	WFC::Vector3i wfcCell{ cellPos.X, cellPos.Y, cellPos.Z };
+	TOptional<TTuple<WfcFacePrototypeID, WFC_Transforms2D>> currentResult;
+	for (int wfcTileI = 0; wfcTileI < state->Grid.InputTiles.size(); ++wfcTileI)
+	{
+		for (auto permutation : state->Grid.PossiblePermutations[{ wfcTileI, wfcCell }])
+		{
+			auto newResult = generateResult(wfcTileI, permutation);
+			check(newResult.IsSet());
+			
+			if (currentResult != *newResult)
+				if (currentResult.IsSet())
+					return NullOpt;
+				else
+					currentResult = *newResult;
+		}
+	}
+	return currentResult;
+}
+
 void UWfcGenerator::Start(const UWfcTileset* tiles,
                           const FIntVector& gridSize,
-                          int seed,
+                          int newSeed,
                           float temperatureClearGrowthRateT, float fuzziness, int maxUnwinding,
                           bool periodicX, bool periodicY, bool periodicZ)
 {
@@ -374,10 +487,20 @@ void UWfcGenerator::Start(const UWfcTileset* tiles,
 	}
 	tileset->Unwrap(wfcLibraryData);
 
+	//Create an object to remember this generator's initial state.
+	static FName NAME_WfcInitialState = TEXT("WfcGeneratorInitialState");
+	initialState = UWfcGeneratorInitialState::MakeInitialWfcState(
+		tileset, gridSize, newSeed,
+		periodicX, periodicY, periodicZ, { },
+		temperatureClearGrowthRateT, fuzziness, maxUnwinding,
+		this, NAME_WfcInitialState, true
+	);
+
 	//Start the algorithm.
 	state.Emplace(
 	    wfcLibraryData.Tiles, WFC::Vector3i(gridSize.X, gridSize.Y, gridSize.Z),
-	    WFC::PRNG(seed)
+	    periodicX, periodicY, periodicZ,
+	    WFC::PRNG(newSeed)
 	);
 	state->PriorityWeightRandomness = fuzziness,
 	state->ClearRegionGrowthRateT = temperatureClearGrowthRateT;
@@ -387,8 +510,11 @@ void UWfcGenerator::Start(const UWfcTileset* tiles,
 void UWfcGenerator::Cancel()
 {
     status = WfcSimState::Off;
+	
     state.Reset();
 	stateHistoryBuffer.Empty();
+
+	constraintsInOrder.Empty();
 }
 
 void UWfcGenerator::Tick(int nIterations)
@@ -460,4 +586,112 @@ void UWfcGenerator::ClearStateHistory()
 	check(state);
 	
 	stateHistoryBuffer.Empty();
+}
+
+
+UWfcGeneratorInitialState* UWfcGeneratorInitialState::MakeInitialWfcState(
+						       const UWfcTileset* tileset,
+							   FIntVector gridSize, int seedU32,
+							   bool isPeriodicX, bool isPeriodicY, bool isPeriodicZ,
+							   const TArray<TInstancedStruct<FWfcConstraintEntry>> constraints,
+							   float tempClearGrowthRateT, float fuzziness,
+							   int maxUnwinding,
+							   UObject* owner,
+							   FName name,
+							   bool isTransient
+						   )
+{
+	auto* o = NewObject<UWfcGeneratorInitialState>(owner, name, isTransient ? RF_Transient : RF_NoFlags);
+
+	o->Tileset = tileset;
+	o->PeriodicX = isPeriodicX;
+	o->PeriodicY = isPeriodicY;
+	o->PeriodicZ = isPeriodicZ;
+	o->GridSize = gridSize;
+	o->SeedU32 = seedU32;
+	o->Constraints = constraints;
+	o->TemperatureClearGrowthRateT = tempClearGrowthRateT;
+	o->Fuzziness = fuzziness;
+	o->MaxUnwinding = maxUnwinding;
+	
+	return o;
+}
+
+bool UWfcGeneratorInitialState::CompareWfcInitialStates(const UWfcGeneratorInitialState* a,
+														const UWfcGeneratorInitialState* b)
+{
+	if (!IsValid(a))
+		return !IsValid(b);
+
+	return IsValid(b) &&
+		   a->Tileset == b->Tileset &&
+		   a->PeriodicX == b->PeriodicX &&
+  		   a->PeriodicY == b->PeriodicY &&
+		   a->PeriodicZ == b->PeriodicZ &&
+		   a->GridSize == b->GridSize &&
+		   a->SeedU32 == b->SeedU32 &&
+		   a->Constraints == b->Constraints &&
+		   a->TemperatureClearGrowthRateT == b->TemperatureClearGrowthRateT &&
+		   a->Fuzziness == b->Fuzziness &&
+		   a->MaxUnwinding == b->MaxUnwinding;
+}
+
+void UWfcGeneratorInitialState::RestartGenerator(UWfcGenerator* generatorToUse) const
+{
+	generatorToUse->Start(
+		Tileset, GridSize,
+		SeedU32,
+		TemperatureClearGrowthRateT, Fuzziness,
+		MaxUnwinding,
+		PeriodicX, PeriodicY, PeriodicZ
+	);
+	generatorToUse->AddConstraints(Constraints);
+}
+UWfcGeneratorInitialState* UWfcGeneratorInitialState::SaveAsAsset(const FString& pathWithinContentFolder,
+																  const UEngine::FCopyPropertiesForUnrelatedObjectsParams& copyParams,
+																  bool highlightAsset)
+{
+	#if WITH_EDITOR
+
+	//Source: https://dev.epicgames.com/community/learning/knowledge-base/wzdm/unreal-engine-how-to-create-new-assets-in-c
+    
+	FAssetToolsModule& moduleAssetTools = FModuleManager::Get().LoadModuleChecked<FAssetToolsModule>("AssetTools");
+	FContentBrowserModule& moduleContentBrowser = FModuleManager::LoadModuleChecked<FContentBrowserModule>("ContentBrowser");
+	FAssetRegistryModule& moduleAssetRegistry = FModuleManager::LoadModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+
+	//Generate a unique asset name.
+	FString assetName, packageName;
+	moduleAssetTools.Get().CreateUniqueAssetName(FString("/Game/") + pathWithinContentFolder,
+												 TEXT("_WfcInitialState"),
+												 packageName, assetName);
+	auto packageDirPath = FPackageName::GetLongPackagePath(packageName);
+	 
+	//Create the object and its package.
+	UPackage* package = CreatePackage(*packageName);
+	auto* assetObject = CastChecked<UWfcGeneratorInitialState>(moduleAssetTools.Get().CreateAsset(
+		assetName,
+		packageDirPath,
+		GetClass(),
+		nullptr
+	));
+	UEngine::CopyPropertiesForUnrelatedObjects(this, assetObject, copyParams);
+
+	//Save the package.
+	FSavePackageArgs saveArgs;
+	saveArgs.TopLevelFlags = RF_Public | RF_Standalone;
+	GEditor->Save(package, assetObject,
+				  *FPackageName::LongPackageNameToFilename(packageName, FPackageName::GetAssetPackageExtension()),
+				  saveArgs);
+
+	//Ping the editor about the new asset.
+	moduleAssetRegistry.Get().AssetCreated(assetObject);
+	if (highlightAsset)
+		moduleContentBrowser.Get().SyncBrowserToAssets(TArray<UObject*>{ assetObject });
+
+	return assetObject;
+
+	#else
+		UE_LOG(LogWFCpp, Error, TEXT("Tried to call UWfcGeneratorInitialState::SaveAsAsset() outside the editor!"));
+		return nullptr;
+	#endif
 }

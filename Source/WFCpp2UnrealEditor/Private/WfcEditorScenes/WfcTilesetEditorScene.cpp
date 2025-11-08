@@ -1,9 +1,10 @@
 ﻿#include "WfcEditorScenes/WfcTilesetEditorScene.h"
 
 #include "GameFramework/WorldSettings.h"
+#include "Kismet/BlueprintSetLibrary.h"
 
 #include "WFCpp2UnrealEditor.h"
-#include "Kismet/BlueprintSetLibrary.h"
+#include "WfcGenerator.h"
 #include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
 
 
@@ -31,6 +32,7 @@ FWfcTilesetEditorScene::FWfcTilesetEditorScene(ConstructionValues cvs)
 }
 
 void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> tile, const FVector& camPos,
+                                     UWfcGeneratorInitialState* overrideInitialState,
                                      FWfcTilesetEditorViewportClient* owner)
 {
     check(owner);
@@ -43,29 +45,55 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 		if (found)
 			newTile = found;
 	}
-
+	
 	//Update our state based on the refreshed tileset/selected tile/changes to public fields.
 	if (tileset && Mode == EWfcTilesetEditorMode::Generation && currentViewMode != Mode)
 	{
 		viewMode.Emplace<FEditorSceneObject_WfcGeneration>(
 			*this, *owner,
-			FTransform{ }, SpacingBetweenTiles,
+			FEditorSceneObject_WfcGeneration_Display{
+				static_cast<float>(SpacingBetweenTiles),
+				FTransform{ },
+				DisplayFaceConstraintsInGeneration
+			},
 			tileset, GenerationSettings
 		);
 		currentViewMode = Mode;
 		
 		NGeneratorTicksToRun = 0;
-		owner->RedrawRequested(owner->Viewport);	
+		owner->RedrawRequested(owner->Viewport);
+	}
+	else if (Mode == EWfcTilesetEditorMode::OverrideGeneration &&
+			 overrideInitialState && (overrideInitialState->Tileset) &&
+			 !viewMode.IsType<FWfcTilesetEditorOverrideGeneration>())
+	{
+		check(currentViewMode != Mode);
+
+		viewMode.Emplace<FWfcTilesetEditorOverrideGeneration>(
+			*this, *owner,
+			FEditorSceneObject_WfcGeneration_Display{
+				static_cast<float>(SpacingBetweenTiles - tileset->TileLength),
+				FTransform{ },
+				DisplayFaceConstraintsInGeneration
+			},
+			overrideInitialState
+		);
+		GenerationSettings = viewMode.Get<FWfcTilesetEditorOverrideGeneration>()
+								.AsGeneration().GetCurrentSettings();
+		currentViewMode = EWfcTilesetEditorMode::OverrideGeneration;
+		
+		NGeneratorTicksToRun = 0;
+		owner->RedrawRequested(owner->Viewport);
 	}
 	else if (newTile && (
-			currentViewMode != Mode ||
-			currentTileset.Get() != tileset ||
-			!currentTile || !currentTileID.IsSet() ||
-			*newTile != *currentTile || *tile != *currentTileID ||
-			!currentTileset->FacePrototypes.OrderIndependentCompareEqual(tileset->FacePrototypes) ||
-			(viewMode.IsType<FEditorSceneObject_WfcTileWithMatches>() &&
-				!SetsAreEqual(currentFacesToMatch, FacesToMatchAgainst)) ||
-			currentPermutationToMatch != PermutationToMatchAgainst
+			 currentViewMode != Mode ||
+			 currentTileset.Get() != tileset ||
+			 !currentTile || !currentTileID.IsSet() ||
+			 *newTile != *currentTile || *tile != *currentTileID ||
+			 !currentTileset->FacePrototypes.OrderIndependentCompareEqual(tileset->FacePrototypes) ||
+			 (viewMode.IsType<FEditorSceneObject_WfcTileWithMatches>() &&
+			 	!SetsAreEqual(currentFacesToMatch, FacesToMatchAgainst)) ||
+			 currentPermutationToMatch != PermutationToMatchAgainst
 		))
 	{
 		currentTileset = { tileset };
@@ -128,10 +156,29 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 			case EWfcTilesetEditorMode::Generation:
 				viewMode.Emplace<FEditorSceneObject_WfcGeneration>(
 					*this, *owner,
-					FTransform{ }, SpacingBetweenTiles,
+					FEditorSceneObject_WfcGeneration_Display{
+						static_cast<float>(SpacingBetweenTiles),
+						FTransform{ },
+						DisplayFaceConstraintsInGeneration
+					},
 					tileset, GenerationSettings
 				);
 				NGeneratorTicksToRun = 0;
+			break;
+			case EWfcTilesetEditorMode::OverrideGeneration:
+				if (IsValid(overrideInitialState))
+				{
+					viewMode.Emplace<FWfcTilesetEditorOverrideGeneration>(
+						*this, *owner,
+						FEditorSceneObject_WfcGeneration_Display{
+							static_cast<float>(SpacingBetweenTiles),
+							FTransform{ },
+							DisplayFaceConstraintsInGeneration
+						},
+						overrideInitialState
+					);
+					NGeneratorTicksToRun = 0;
+				}
 			break;
 			
 			default:
@@ -143,7 +190,9 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 		currentViewMode = Mode;
 		owner->RedrawRequested(owner->Viewport);
 	}
-	else if (!newTile && !viewMode.IsType<FEditorSceneObject_WfcGeneration>())
+	else if (!newTile &&
+		     !viewMode.IsType<FEditorSceneObject_WfcGeneration>() &&
+		     !viewMode.IsType<FWfcTilesetEditorOverrideGeneration>())
 	{
 		currentTileset.Reset();
 		currentTile.Reset();
@@ -153,19 +202,24 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 		
 		owner->RedrawRequested(owner->Viewport);	
 	}
-	else if (viewMode.IsType<FEditorSceneObject_WfcGeneration>())
+	else if (viewMode.IsType<FEditorSceneObject_WfcGeneration>() ||
+			 viewMode.IsType<FWfcTilesetEditorOverrideGeneration>())
 	{
-		auto& generator = viewMode.Get<FEditorSceneObject_WfcGeneration>();
+		auto& generatorManager = *GetGeneratorManager();
 
 		for (int rewindI = 0; rewindI < NRewindsToRun; ++rewindI)
-			generator.Rewind();
+			generatorManager.Rewind();
 		NRewindsToRun = 0;
 		
-		generator.Tick(NGeneratorTicksToRun);
+		generatorManager.Tick(NGeneratorTicksToRun);
 		NGeneratorTicksToRun = 0;
 
-		generator.ChangeSpace(FTransform{ }, SpacingBetweenTiles);
-		generator.RefreshSettings(GenerationSettings);
+		generatorManager.ChangeSpace(FEditorSceneObject_WfcGeneration_Display{
+			static_cast<float>(SpacingBetweenTiles),
+			FTransform{ },
+			DisplayFaceConstraintsInGeneration
+		});
+		generatorManager.RefreshSettings(GenerationSettings);
 		
 		owner->RedrawRequested(owner->Viewport);	
 	}
