@@ -375,7 +375,7 @@ FEditorSceneObject_WfcTile::FEditorSceneObject_WfcTile(FWfcTilesetEditorScene& o
 	check(tileset->Tiles.Contains(tileID));
 	const auto& tile = tileset->Tiles[tileID];
 	
-	for (int i = 0; i < WFC::Tiled3D::N_DIRECTIONS_3D; ++i)
+	for (int i = 0; settings.ShowFaces && i < WFC::Tiled3D::N_DIRECTIONS_3D; ++i)
 	{
 		auto dir = static_cast<WFC::Tiled3D::Directions3D>(i);
 		const auto& faceData = tile.GetFace(dir);

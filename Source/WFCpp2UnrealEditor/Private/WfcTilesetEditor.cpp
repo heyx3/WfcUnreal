@@ -130,6 +130,23 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 				return EVisibility::Hidden;
 		}
 	};
+	auto showIfNotGeneratingOrOverrideFn = [&]() {
+		switch (GetScene().Mode)
+		{
+			case EWfcTilesetEditorMode::Matches:
+			case EWfcTilesetEditorMode::Permutations:
+			case EWfcTilesetEditorMode::Tile:
+				return EVisibility::Visible;
+			
+			case EWfcTilesetEditorMode::Generation:
+			case EWfcTilesetEditorMode::OverrideGeneration:
+				return EVisibility::Collapsed;
+
+			default:
+				check(false);
+			return EVisibility::Hidden;
+		}
+	};
 	auto showIfGeneratingNotOverrideFn = [&]() {
 		switch (GetScene().Mode)
 		{
@@ -484,6 +501,27 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 						      GetScene().DisplayFaceConstraintsInGeneration =
 						      	(newState == ECheckBoxState::Checked);
 						  })
+					]
+				]
+
+				//Show Faces checkbox
+				+ SScrollBox::Slot()
+				[
+					SNew(SHorizontalBox)
+						.Visibility_Lambda(showIfNotGeneratingOrOverrideFn)
+
+					+ SHorizontalBox::Slot()
+					[
+						SNew(STextBlock)
+							.Text(LOCTEXT("ShowFaceDataLabel", "Show face data"))
+					]
+					+SHorizontalBox::Slot()
+					[
+						SNew(SCheckBox)
+							.IsChecked_Lambda([&]() { return GetScene().ShowFaceData ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+							.OnCheckStateChanged_Lambda([&](ECheckBoxState newState) {
+								GetScene().ShowFaceData = (newState == ECheckBoxState::Checked);
+							})
 					]
 				]
 

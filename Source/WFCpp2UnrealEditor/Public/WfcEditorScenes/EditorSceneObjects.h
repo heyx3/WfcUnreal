@@ -39,6 +39,7 @@ struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcTile_Settings : public FEdit
 {
 	bool IncludeDataVisualizer = true;
 	FLinearColor BoundsColor = { 0, 0, 0, 1 };
+	bool ShowFaces = true;
 };
 
 struct WFCPP2UNREALEDITOR_API FEditorSceneObject_WfcPermutations_Settings : public FEditorSceneObject_WfcTile_Settings

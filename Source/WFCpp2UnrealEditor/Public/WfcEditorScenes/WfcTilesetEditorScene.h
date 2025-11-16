@@ -71,6 +71,7 @@ public:
 
 	EWfcTilesetEditorMode Mode = EWfcTilesetEditorMode::Tile;
 	double SpacingBetweenTiles = 500.0;
+	bool ShowFaceData = true;
 	FWFC_Transform3D PermutationToMatchAgainst;
 	TSet<WFC_Directions3D> FacesToMatchAgainst = { WFC_Directions3D::MaxX };
 	

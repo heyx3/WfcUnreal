@@ -114,7 +114,8 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 							1.0f, true
 						},
 						true,
-						FLinearColor{ 0, 0, 0, 1 }
+						FLinearColor{ 0, 0, 0, 1 },
+						ShowFaceData
 					}
 				);
 			break;
@@ -129,7 +130,8 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 								1.0f, true
 							},
 							true,
-							FLinearColor{ 0, 0, 0, 1 }
+							FLinearColor{ 0, 0, 0, 1 },
+							ShowFaceData
 						},
 						FLinearColor{ 0, 0, 0, 1 }, FLinearColor{ 0.4, 0.4, 0.4, 1 }
 					}
@@ -147,7 +149,8 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 								1.0f, true
 							},
 							true,
-							FLinearColor{ 0, 0, 0, 1 }
+							FLinearColor{ 0, 0, 0, 1 },
+							ShowFaceData
 						},
 						FLinearColor{ 0, 0, 0, 1 }
 					}
