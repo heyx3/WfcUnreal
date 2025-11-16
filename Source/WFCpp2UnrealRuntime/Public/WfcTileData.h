@@ -76,8 +76,11 @@ struct TStructOpsTypeTraits<FWfcGameData> : public TStructOpsTypeTraitsBase2<FWf
         WithIdentical = true //NOTE: if using IdenticalViaEquality, then Unreal's polymorphic wrapper can't compare them :(
     };
 };
+#define WFCPP_UNREAL_TILE_GAME_DATA_TYPE_TRAITS_INNER
 #define WFCPP_UNREAL_TILE_GAME_DATA_TYPE_TRAITS(className) \
-    template<> struct TStructOpsTypeTraits<className> : public TStructOpsTypeTraits<className::Super> { }
+    template<> struct TStructOpsTypeTraits<className> : public TStructOpsTypeTraits<className::Super> { \
+		WFCPP_UNREAL_TILE_GAME_DATA_TYPE_TRAITS_INNER \
+	}
 
 //Associates a WFC tile with a static mesh asset.
 USTRUCT(BlueprintType)
