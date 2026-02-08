@@ -3,8 +3,12 @@
 #include "CoreMinimal.h"
 
 #include "EditorSceneComponents.h"
+
 #include "WfcTileData.h"
 #include "WfcTileset.h"
+#include "WfcTileDebugActor.h"
+
+class AActor;
 
 
 struct FWfcTileVisualizerInputs
@@ -76,4 +80,32 @@ public:
 	WfcTileVisualizer_StaticMesh(const FWfcTileVisualizerInputs& inputs);
 
 	FEditorMeshComponent meshComponent;
+};
+
+class WFCPP2UNREALEDITOR_API WfcTileVisualizer_Actor : public WfcTileVisualizer
+{
+public:
+
+	WfcTileVisualizer_Actor(const FWfcTileVisualizerInputs& inputs);
+	virtual ~WfcTileVisualizer_Actor() override;
+
+protected:
+	void UpdateTransform(const FTransform& oldTileTr, const FTransform& newTileTr) override;
+
+private:
+	TWeakObjectPtr<AActor> previewActor;
+};
+
+class WFCPP2UNREALEDITOR_API WfcTileVisualizer_Debug : public WfcTileVisualizer
+{
+public:
+
+	WfcTileVisualizer_Debug(const FWfcTileVisualizerInputs& inputs);
+	virtual ~WfcTileVisualizer_Debug() override;
+
+protected:
+	void UpdateTransform(const FTransform& oldTileTr, const FTransform& newTileTr) override;
+
+private:
+	TWeakObjectPtr<AWfcTileDebugActor> previewActor;
 };

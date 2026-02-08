@@ -68,11 +68,11 @@ void FWfcTilesetEditor::RegisterTabSpawners(const TSharedRef<FTabManager>& tabMa
 	tabManager->RegisterTabSpawner(WfcTileset_TabID_Properties, FOnSpawnTab::CreateSP(this, &FWfcTilesetEditor::GeneratePropertiesTab))
 		.SetDisplayName(LOCTEXT("PropertiesTab", "Details"))
 		.SetGroup(WorkspaceMenuCategory.ToSharedRef())
-		.SetIcon(FSlateIcon(FEditorStyle::GetStyleSetName(), "LevelEditor.Tabs.Details"));
+		.SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.Tabs.Details"));
 	tabManager->RegisterTabSpawner(WfcTileset_TabID_EditorSettings, FOnSpawnTab::CreateSP(this, &FWfcTilesetEditor::GenerateEditorSettingsTab))
 		.SetDisplayName(LOCTEXT("EditorSettingsTab", "Editor Settings"))
 		.SetGroup(WorkspaceMenuCategory.ToSharedRef())
-	    .SetIcon(FSlateIcon(FEditorStyle::GetStyleSetName(), "LevelEditor.Tabs.Details"));
+	    .SetIcon(FSlateIcon(FAppStyle::GetAppStyleSetName(), "LevelEditor.Tabs.Details"));
     
     //The scene view tab has its own special factory.
     //Probably wouldn't hurt to refactor the other tabs similarly (apart from Properties).
@@ -96,16 +96,17 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GeneratePropertiesTab(const FSpawnTabArg
 {
 	check(args.GetTabId() == WfcTileset_TabID_Properties);
 
-	return SAssignNew(propertiesTab, SDockTab)
-		 .Icon(FEditorStyle::GetBrush("GenericEditor.Tabs.Properties"))
+	TSharedRef<SDockTab> Tab = SAssignNew(propertiesTab, SDockTab)
 		 .Label(LOCTEXT("GenericDetailsTitle", "Details"))
 		 .TabColorScale(GetTabColorScale())
 		 [
 			 SNew(SVerticalBox)
-			 +SVerticalBox::Slot() .HAlign(HAlign_Left) [
+			 +SVerticalBox::Slot().HAlign(HAlign_Fill) [
 		         detailsView.ToSharedRef()
 		     ]
 		 ];
+	Tab->SetTabIcon(FAppStyle::GetBrush("GenericEditor.Tabs.Properties"));
+	return Tab;
 }
 TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTabArgs& args)
 {
@@ -179,102 +180,103 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 	);
 	editorForPermutationToMatch->SetStructureData(MakeShareable(scopedMatchingPermutationStruct));
 	
-	return SAssignNew(tileSelectorTab, SDockTab)
-			.Icon(FEditorStyle::GetBrush("GenericEditor.Tabs.Properties"))
-			.Label(LOCTEXT("EditorSettingsTabLabel", "Editor Settings"))
-			.TabColorScale(GetTabColorScale())
+	auto Tab = SAssignNew(tileSelectorTab, SDockTab)
+		.Label(LOCTEXT("EditorSettingsTabLabel", "Editor Settings"))
+		.TabColorScale(GetTabColorScale())
+		[
+			SNew(SScrollBox)
+			+ SScrollBox::Slot()
 			[
-				SNew(SScrollBox)
-				+ SScrollBox::Slot()
-				[
-				    SAssignNew(tileSelector, STextComboBox)
-				        .OptionsSource(&tilesetTileSelectorChoices)
-				        .OnSelectionChanged(this, &FWfcTilesetEditor::OnTileSelected)
-				]
-				+ SScrollBox::Slot()
-				[
-					SNew(SHorizontalBox)
-					+ SHorizontalBox::Slot()
-						.HAlign(HAlign_Left)
-					[
-						SNew(STextBlock)
-						  .Text(LOCTEXT("ViewModeDropdownLabel", "Tile View Mode"))
-						  .Justification(ETextJustify::Type::Left)
-					]
-					+ SHorizontalBox::Slot()
-					[
-						SNew(SEnumComboBox, StaticEnum<EWfcTilesetEditorMode>())
-						  .CurrentValue_Lambda([&]() {
-						      return static_cast<int32>(GetScene().Mode);
-						  })
-						  .OnEnumSelectionChanged_Lambda([&](int32 v, ESelectInfo::Type) {
-						      GetScene().Mode = static_cast<EWfcTilesetEditorMode>(v);
-						  })
-					]
-				]
-				+ SScrollBox::Slot()
-				[
-					SNew(SHorizontalBox)
-						.Visibility_Lambda([&]() {
-							switch (GetScene().Mode)
-							{
-								case EWfcTilesetEditorMode::Tile:
-									return EVisibility::Collapsed;
-								case EWfcTilesetEditorMode::Matches:
-								case EWfcTilesetEditorMode::Permutations:
-									return EVisibility::Visible;
-								
-								default:
-									check(false);
-									return EVisibility::Hidden;
-							}
-						})
-					+ SHorizontalBox::Slot()
-					[
-						SNew(STextBlock)
-						  .Text(LOCTEXT("TileSeparationLabel", "Tile Visual Separation"))
-						  .Justification(ETextJustify::Type::Left)
-					]
-					+ SHorizontalBox::Slot()
-					[
-						SNew(SNumericEntryBox<float>)
-						  .Value_Lambda([&]() { return GetScene().SpacingBetweenTiles; })
-						  .OnValueCommitted_Lambda([&](float f, ETextCommit::Type) { GetScene().SpacingBetweenTiles = f; })
-					]
-				]
-				+ SScrollBox::Slot()
+				SAssignNew(tileSelector, STextComboBox)
+					.OptionsSource(&tilesetTileSelectorChoices)
+					.OnSelectionChanged(this, &FWfcTilesetEditor::OnTileSelected)
+			]
+			+ SScrollBox::Slot()
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot()
+					.HAlign(HAlign_Left)
 				[
 					SNew(STextBlock)
-					  .Visibility_Lambda(showIfMatchingFn)
-					  .Text(LOCTEXT("MatchFacesLabel", "Faces to match with:"))
-					  .Justification(ETextJustify::Type::Left)
+						.Text(LOCTEXT("ViewModeDropdownLabel", "Tile View Mode"))
+						.Justification(ETextJustify::Type::Left)
 				]
-				+ SScrollBox::Slot()
+				+ SHorizontalBox::Slot()
 				[
-					//Tab in:
-					SNew(SHorizontalBox)
-					   .Visibility_Lambda(showIfMatchingFn)
-					+ SHorizontalBox::Slot()
-					    .MinWidth(20).MaxWidth(20)
-					    [ SNew(SSpacer).Size(FVector2D{ 1, 1 }) ]
-					//Display a grid of checkboxes for each face:
-					+ SHorizontalBox::Slot() [
-						SNew(SGridPanel)
-						  + SGridPanel::Slot(0, 0).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MinX) ]
-						  + SGridPanel::Slot(1, 0).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MinY) ]
-						  + SGridPanel::Slot(2, 0).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MinZ) ]
-						  + SGridPanel::Slot(0, 1).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MaxX) ]
-						  + SGridPanel::Slot(1, 1).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MaxY) ]
-						  + SGridPanel::Slot(2, 1).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MaxZ) ]
-					]
+					SNew(SEnumComboBox, StaticEnum<EWfcTilesetEditorMode>())
+						.CurrentValue_Lambda([&]() {
+							return static_cast<int32>(GetScene().Mode);
+						})
+						.OnEnumSelectionChanged_Lambda([&](int32 v, ESelectInfo::Type) {
+							GetScene().Mode = static_cast<EWfcTilesetEditorMode>(v);
+						})
 				]
-				+ SScrollBox::Slot()
+			]
+			+ SScrollBox::Slot()
+			[
+				SNew(SHorizontalBox)
+					.Visibility_Lambda([&]() {
+						switch (GetScene().Mode)
+						{
+							case EWfcTilesetEditorMode::Tile:
+								return EVisibility::Collapsed;
+							case EWfcTilesetEditorMode::Matches:
+							case EWfcTilesetEditorMode::Permutations:
+								return EVisibility::Visible;
+							
+							default:
+								check(false);
+								return EVisibility::Hidden;
+						}
+					})
+				+ SHorizontalBox::Slot()
 				[
-					SNew(SHorizontalBox)
-					    .Visibility_Lambda(showIfMatchingFn)
-					+ SHorizontalBox::Slot() [ editorForPermutationToMatch->GetWidget()->AsShared() ]
+					SNew(STextBlock)
+						.Text(LOCTEXT("TileSeparationLabel", "Tile Visual Separation"))
+						.Justification(ETextJustify::Type::Left)
 				]
-			];
+				+ SHorizontalBox::Slot()
+				[
+					SNew(SNumericEntryBox<float>)
+						.Value_Lambda([&]() { return GetScene().SpacingBetweenTiles; })
+						.OnValueCommitted_Lambda([&](float f, ETextCommit::Type) { GetScene().SpacingBetweenTiles = f; })
+				]
+			]
+			+ SScrollBox::Slot()
+			[
+				SNew(STextBlock)
+					.Visibility_Lambda(showIfMatchingFn)
+					.Text(LOCTEXT("MatchFacesLabel", "Faces to match with:"))
+					.Justification(ETextJustify::Type::Left)
+			]
+			+ SScrollBox::Slot()
+			[
+				//Tab in:
+				SNew(SHorizontalBox)
+					.Visibility_Lambda(showIfMatchingFn)
+				+ SHorizontalBox::Slot()
+					.MinWidth(20).MaxWidth(20)
+					[ SNew(SSpacer).Size(FVector2D{ 1, 1 }) ]
+				//Display a grid of checkboxes for each face:
+				+ SHorizontalBox::Slot() [
+					SNew(SGridPanel)
+						+ SGridPanel::Slot(0, 0).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MinX) ]
+						+ SGridPanel::Slot(1, 0).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MinY) ]
+						+ SGridPanel::Slot(2, 0).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MinZ) ]
+						+ SGridPanel::Slot(0, 1).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MaxX) ]
+						+ SGridPanel::Slot(1, 1).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MaxY) ]
+						+ SGridPanel::Slot(2, 1).Padding(7.0f, 3.5f) [ faceMatcherToggleWidget(WFC_Directions3D::MaxZ) ]
+				]
+			]
+			+ SScrollBox::Slot()
+			[
+				SNew(SHorizontalBox)
+					.Visibility_Lambda(showIfMatchingFn)
+				+ SHorizontalBox::Slot() [ editorForPermutationToMatch->GetWidget()->AsShared() ]
+			]
+		];
+	Tab->SetTabIcon(FAppStyle::GetBrush("GenericEditor.Tabs.Properties"));
+	return Tab;
 }
 
 void FWfcTilesetEditor::RefreshTileChoices()
@@ -328,11 +330,13 @@ void FWfcTilesetEditor::InitWfcTilesetEditorEditor(const EToolkitMode::Type mode
 	
 	//Retrieve the property editor module and assign properties to the DetailsView.
 	auto& propertyEditorModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
-	detailsView = propertyEditorModule.CreateDetailView(FDetailsViewArgs(
-		false, true, true,
-		FDetailsViewArgs::ObjectsUseNameArea,
-		false
-	));
+	FDetailsViewArgs detailsViewArgs;
+	detailsViewArgs.bUpdatesFromSelection = false;
+	detailsViewArgs.bLockable = true;
+	detailsViewArgs.bAllowSearch = true;
+	detailsViewArgs.NameAreaSettings = FDetailsViewArgs::ObjectsUseNameArea;
+	detailsViewArgs.bHideSelectionTip = false;
+	detailsView = propertyEditorModule.CreateDetailView(detailsViewArgs);
     detailsView->OnFinishedChangingProperties().AddRaw(this, &FWfcTilesetEditor::OnTilesetEdited);
 
 	//Create our editor's layout.

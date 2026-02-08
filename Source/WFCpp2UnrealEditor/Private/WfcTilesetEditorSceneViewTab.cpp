@@ -1,6 +1,6 @@
 ﻿#include "WfcTilesetEditorSceneViewTab.h"
 
-#include "EditorStyleSet.h"
+#include "Styling/AppStyle.h"
 
 #include "WfcTilesetEditor.h"
 
@@ -16,7 +16,7 @@ FWfcTilesetEditorSceneViewTab::FWfcTilesetEditorSceneViewTab(TSharedPtr<FWfcTile
     bIsSingleton = false;
 
     TabLabel = LOCTEXT("SceneViewLabel", "Visualizer");
-    TabIcon = FSlateIcon(FEditorStyle::GetStyleSetName(), "Kismet.Tabs.Components");
+    TabIcon = FSlateIcon(FAppStyle::GetAppStyleSetName(), "Kismet.Tabs.Components");
 
     ViewMenuDescription = LOCTEXT("SceneView", "View the Viz");
     ViewMenuTooltip = LOCTEXT("SceneViewTooltip", "Fancy a view menu?");

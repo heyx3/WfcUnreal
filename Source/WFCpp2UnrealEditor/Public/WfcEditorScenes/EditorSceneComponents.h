@@ -3,6 +3,9 @@
 #include "CoreMinimal.h"
 #include "WFCpp2UnrealEditor.h"
 #include "Components/TextRenderComponent.h"
+#include "Components/ArrowComponent.h"
+#include "Components/SphereComponent.h"
+#include "Components/BoxComponent.h"
 #include "GameFramework/WorldSettings.h"
 
 
@@ -15,7 +18,7 @@ struct WFCPP2UNREALEDITOR_API FEditorSceneComponent
 public:
 	
 	FEditorSceneComponent(FPreviewScene* owner, const FTransform& transform,
-						  TSubclassOf<UActorComponent> type);
+						  UClass* type);
 	virtual ~FEditorSceneComponent();
 
 	FEditorSceneComponent(const FEditorSceneComponent& cpy) = delete;
@@ -53,7 +56,7 @@ public:
 
 	TEditorSceneComponent(FPreviewScene* owner, const FTransform& transform,
 						  TSubclassOf<TComponent> type = TComponent::StaticClass())
-		: FEditorSceneComponent(owner, transform, type)
+		: FEditorSceneComponent(owner, transform, type.Get())
 	{
 		
 	}
@@ -71,13 +74,13 @@ struct WFCPP2UNREALEDITOR_API FEditorMeshComponent : public TEditorSceneComponen
 						 UStaticMesh* mesh, const FTransform& transform,
 						 UMaterialInterface* material = nullptr);
 };
-struct WFCPP2UNREALEDITOR_API FEditorWireSphereComponent : public TEditorSceneComponent<class USphereComponent>
+struct WFCPP2UNREALEDITOR_API FEditorWireSphereComponent : public TEditorSceneComponent<USphereComponent>
 {
 	FEditorWireSphereComponent(FPreviewScene* owner, const FTransform& transform,
 				   		       const FColor& color);
 };
 //The box's unrotated extents are equal to its local scale.
-struct WFCPP2UNREALEDITOR_API FEditorWireBoxComponent : public TEditorSceneComponent<class UBoxComponent>
+struct WFCPP2UNREALEDITOR_API FEditorWireBoxComponent : public TEditorSceneComponent<UBoxComponent>
 {
 	FEditorWireBoxComponent(FPreviewScene* owner, const FTransform& transform,
 				  		    const FColor& color);
@@ -99,7 +102,7 @@ struct WFCPP2UNREALEDITOR_API FEditorWireBoxComponent : public TEditorSceneCompo
 	}
 };
 //The plane's horizontal extents are equal to its local scale.
-struct WFCPP2UNREALEDITOR_API FEditorPlaneComponent : public TEditorSceneComponent<class UStaticMeshComponent>
+struct WFCPP2UNREALEDITOR_API FEditorPlaneComponent : public TEditorSceneComponent<UStaticMeshComponent>
 {
 	FEditorPlaneComponent(FPreviewScene* owner, const FTransform& transform,
 						  UMaterialInterface* material = nullptr);
@@ -114,7 +117,7 @@ struct WFCPP2UNREALEDITOR_API FEditorPlaneComponent : public TEditorSceneCompone
 	static FTransform GetTransform(const FVector& origin, const FVector2D& planeSize, const FVector& normal);
 };
 
-struct WFCPP2UNREALEDITOR_API FEditorArrowComponent : public TEditorSceneComponent<class UArrowComponent>
+struct WFCPP2UNREALEDITOR_API FEditorArrowComponent : public TEditorSceneComponent<UArrowComponent>
 {
 	FEditorArrowComponent(FPreviewScene* owner, const FTransform& transform,
 					      const FColor& color,

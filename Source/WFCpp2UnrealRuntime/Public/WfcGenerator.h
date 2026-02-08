@@ -5,7 +5,6 @@
 
 #include "WfcGenerator.generated.h"
 
-
 UENUM(BlueprintType)
 enum class WfcSimState : uint8
 {

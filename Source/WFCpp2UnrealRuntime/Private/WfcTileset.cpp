@@ -110,8 +110,8 @@ void UWfcTileset::Unwrap(Unwrapped& output) const
                 auto localPoint = static_cast<WFC::Tiled3D::FacePoints>(pointI);
                 auto prototypeCorner = assetFace.GetPrototypeCorner(localPoint),
             		 prototypeEdge = assetFace.GetPrototypeEdge(localPoint);
-                auto cornerID = prototype ? prototype->Corners.PointAt(prototypeCorner) : static_cast<EWfcPointID>(nullFaceFirstID),
-            		 edgeID = prototype ? prototype->Edges.PointAt(prototypeEdge) : static_cast<EWfcPointID>(nullFaceFirstID);
+                auto cornerID = prototype ? prototype->Corners.PointAt(prototypeCorner) : EWfcPointID::null,
+            		 edgeID = prototype ? prototype->Edges.PointAt(prototypeEdge) : EWfcPointID::null;
 
                 //Convert the 0-3 symmetry value stored in the asset,
                 //    into a unique index across all tile faces.

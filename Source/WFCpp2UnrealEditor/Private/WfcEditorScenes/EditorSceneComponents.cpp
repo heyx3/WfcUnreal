@@ -9,10 +9,11 @@
 #include "Kismet/KismetMathLibrary.h"
 
 
-FEditorSceneComponent::FEditorSceneComponent(FPreviewScene* _owner, const FTransform& transform, TSubclassOf<UActorComponent> type)
+FEditorSceneComponent::FEditorSceneComponent(FPreviewScene* _owner, const FTransform& transform, UClass* type)
 	: owner(_owner)
 {
 	check(owner);
+	check(type);
 
 	componentUntyped = NewObject<UActorComponent>(GetTransientPackage(), type);
 	if (auto* sceneComponent = Cast<USceneComponent>(componentUntyped))

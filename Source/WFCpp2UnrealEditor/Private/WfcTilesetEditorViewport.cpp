@@ -1,5 +1,6 @@
 ﻿#include "WfcTilesetEditorViewport.h"
 
+#include "WfcEditorScenes/WfcTilesetEditorScene.h"
 #include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
 #include "WfcTilesetEditorViewportToolBar.h"
 
@@ -34,7 +35,7 @@ TSharedRef<FEditorViewportClient> SWfcTilesetEditorViewport::MakeEditorViewportC
 
     return viewportClient.ToSharedRef();
 }
-TSharedPtr<SWidget> SWfcTilesetEditorViewport::MakeViewportToolbar()
+TSharedPtr<SWidget> SWfcTilesetEditorViewport::BuildViewportToolbar()
 {
     return SNew(SWfcTilesetEditorViewportToolBar, SharedThis(this))
             .Cursor(EMouseCursor::Default);

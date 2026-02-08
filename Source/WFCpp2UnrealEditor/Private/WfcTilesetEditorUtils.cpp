@@ -11,7 +11,11 @@ TWeakObjectPtr<AActor> WfcTilesetEditorUtils::CreatePreviewSceneActor(UWorld* wo
     if (!IsValid(world))
         return nullptr;
     
-    auto* actor = world->SpawnActor<AActor>();
+    UClass* spawnClass = IsValid(type.Get()) ? type.Get() : AActor::StaticClass();
+    auto* actor = world->SpawnActor<AActor>(spawnClass);
+    if (!IsValid(actor))
+        return nullptr;
+    actor->SetFlags(RF_Transient);
     if (actor->GetRootComponent() == nullptr)
     {
         USceneComponent* RootComponent = NewObject<USceneComponent>(

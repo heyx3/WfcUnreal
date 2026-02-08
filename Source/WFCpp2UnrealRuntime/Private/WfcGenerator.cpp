@@ -95,9 +95,9 @@ void UWfcGenerator::SetFace(const FIntVector& cell, WFC_Directions3D face,
 		UE_LOG(LogWFCpp, Error, TEXT("Cell index is out of range: %i,%i,%i"), cell.X, cell.Y, cell.Z);
 		return;
 	}
-	if (facePrototypeId < 0 || facePrototypeId >= tileset->FacePrototypes.Num())
+	if (!tileset->FacePrototypes.Contains(facePrototypeId))
 	{
-		UE_LOG(LogWFCpp, Error, TEXT("Face prototype index is invalid: %i/%i"), facePrototypeId, tileset->FacePrototypes.Num());
+		UE_LOG(LogWFCpp, Error, TEXT("Face prototype ID not found: %i"), facePrototypeId);
 		return;
 	}
 
@@ -154,6 +154,12 @@ void UWfcGenerator::Start(const UWfcTileset* tiles,
 	if (IsRunning())
 		Cancel();
 
+	// TODO: Periodicity is not yet implemented in the Unreal wrapper
+	if (periodicX || periodicY || periodicZ)
+	{
+		UE_LOG(LogWFCpp, Warning, TEXT("Periodicity parameters (periodicX/Y/Z) are not yet implemented and will be ignored!"));
+	}
+
     tileset = tiles;
 	if (!IsValid(tileset) || tileset->Tiles.Num() == 0)
 	{
@@ -168,9 +174,13 @@ void UWfcGenerator::Start(const UWfcTileset* tiles,
 	    nullptr,
 	    WFC::PRNG(seed)
 	);
-	state->PriorityWeightRandomness = fuzziness,
+	state->PriorityWeightRandomness = fuzziness;
 	state->ClearRegionGrowthRateT = temperatureClearGrowthRateT;
 	state->MaxUnwindingCount = maxUnwinding;
+	if (maxUnwinding > 0)
+		state->InitialUnwindingCount = FMath::Min(state->InitialUnwindingCount, maxUnwinding);
+	else
+		state->InitialUnwindingCount = 0;
 	status = WfcSimState::Running;
 }
 void UWfcGenerator::Cancel()

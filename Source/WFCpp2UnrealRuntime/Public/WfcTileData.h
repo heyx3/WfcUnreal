@@ -2,6 +2,8 @@
 
 #include "CoreMinimal.h"
 
+#include "WfcTileDebugActor.h"
+
 #include "WfcTileData.generated.h"
 
 
@@ -47,4 +49,43 @@ public:
     TSubclassOf<AActor> SanitizedActorType() const { return IsValid(ActorType) ? ActorType : TSubclassOf<AActor>{ AActor::StaticClass() }; }
 
     virtual FString GetEditorDescription_Implementation() const override { return SanitizedActorType()->GetName(); }
+};
+
+UCLASS()
+class WFCPP2UNREALRUNTIME_API UWfcTileGameData_Debug : public UWfcTileGameData
+{
+    GENERATED_BODY()
+
+public:
+
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    FLinearColor MinX;
+    
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    FLinearColor MinY;
+    
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    FLinearColor MinZ;
+    
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    FLinearColor MaxX;
+    
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    FLinearColor MaxY;
+    
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    FLinearColor MaxZ;
+    
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    FLinearColor Default;
+            
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    FText DebugText = FText::GetEmpty();
+    
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    TSubclassOf<AWfcTileDebugActor> DebugActor;
+    
+    TSubclassOf<AActor> SanitizedActorType() const { return IsValid(DebugActor) ? DebugActor : TSubclassOf<AActor>{ AActor::StaticClass() }; }
+    
+    FString GetEditorDescription_Implementation() const override { return SanitizedActorType()->GetName(); }
 };

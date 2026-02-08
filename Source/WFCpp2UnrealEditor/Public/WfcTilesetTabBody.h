@@ -1,7 +1,9 @@
 ﻿#pragma once
 
+#include "WfcEditorScenes/WfcTilesetEditorScene.h"
 #include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
 #include "Widgets/SCompoundWidget.h"
+
 
 //Based on this wonderful tutorial:
 //  https://easycomplex-tech.com/blog/Unreal/AssetEditor/UEAssetEditorDev-AssetEditorPreview/
