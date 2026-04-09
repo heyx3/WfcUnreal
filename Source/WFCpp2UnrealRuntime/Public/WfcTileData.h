@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
+#include "WfcDataReflection.h"
 
 #include "WfcTileData.generated.h"
 
@@ -61,6 +62,7 @@ public:
     bool Identical(const FWfcGameData* other, uint32 flags) const { return Compare(*other); }
 
 protected:
+    //Assume the other instance is the same child type as this one.
     virtual bool Compare(const FWfcGameData& other) const    PURE_VIRTUAL(FWfcGameData::Compare, return false; )
 
 private:
@@ -82,6 +84,7 @@ struct TStructOpsTypeTraits<FWfcGameData> : public TStructOpsTypeTraitsBase2<FWf
 		WFCPP_UNREAL_TILE_GAME_DATA_TYPE_TRAITS_INNER \
 	}
 
+
 //Associates a WFC tile with a static mesh asset.
 USTRUCT(BlueprintType)
 struct WFCPP2UNREALRUNTIME_API FWfcGameData_StaticMesh : public FWfcGameData
@@ -96,7 +99,8 @@ public:
     virtual bool Compare(const FWfcGameData& other) const override { return Mesh == reinterpret_cast<const FWfcGameData_StaticMesh&>(other).Mesh; }
     virtual uint32 Hash() const override { return GetTypeHash(Mesh); }
 };
-template<> struct TStructOpsTypeTraits<FWfcGameData_StaticMesh> : public TStructOpsTypeTraits<FWfcGameData> { };
+WFCPP_UNREAL_TILE_GAME_DATA_TYPE_TRAITS(FWfcGameData_StaticMesh);
+
 
 //Associates a WFC tile with an actor.
 //Consider having that actor check whether it's in an editor preview scene before running any logic!
@@ -115,4 +119,65 @@ public:
     virtual bool Compare(const FWfcGameData& other) const override { return ActorType == reinterpret_cast<const FWfcGameData_Actor&>(other).ActorType; }
     virtual uint32 Hash() const override { return GetTypeHash(ActorType); }
 };
-template<> struct TStructOpsTypeTraits<FWfcGameData_Actor> : public TStructOpsTypeTraits<FWfcGameData> { };
+WFCPP_UNREAL_TILE_GAME_DATA_TYPE_TRAITS(FWfcGameData_Actor);
+
+
+USTRUCT(BlueprintType)
+struct WFCPP2UNREALRUNTIME_API FWfcGameData_MeshList_Element
+{
+    GENERATED_BODY()
+public:
+
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    UStaticMesh* Mesh = nullptr;
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    FWFC_Transform3D Permutation = { };
+
+    bool operator==(const FWfcGameData_MeshList_Element& other) const
+    {
+        return (Mesh == other.Mesh) &&
+               (Permutation == other.Permutation);
+    }
+    bool Serialize(FArchive& ar)
+    {
+        ar << Mesh;
+        ar << Permutation;
+        return true;
+    }
+};
+inline FArchive& operator<<(FArchive& ar, FWfcGameData_MeshList_Element& e)
+{
+    e.Serialize(ar);
+    return ar;
+}
+inline uint32 GetTypeHash(const FWfcGameData_MeshList_Element& e)
+{
+    return GetTypeHash(MakeTuple(e.Mesh, e.Permutation.Unwrap().GetID()));
+}
+template<>
+struct TStructOpsTypeTraits<FWfcGameData_MeshList_Element> : public TStructOpsTypeTraitsBase2<FWfcGameData_MeshList_Element>
+{
+    enum
+    {
+        WithIdenticalViaEquality = true,
+        WithSerializer = true,
+        WithZeroConstructor = true,
+        WithNoDestructor = true
+    };
+};
+//Associates a WFC tile with a list of static mesh assets,
+//    each with a cube-aligned transform.
+USTRUCT(BlueprintType)
+struct WFCPP2UNREALRUNTIME_API FWfcGameData_MeshList : public FWfcGameData
+{
+    GENERATED_BODY()
+public:
+
+    UPROPERTY(BlueprintReadWrite, EditAnywhere)
+    TArray<FWfcGameData_MeshList_Element> Elements;
+
+    virtual FString GenerateDescription() const override { return FString::Printf(TEXT("%i Meshes"), Elements.Num()); }
+    virtual bool Compare(const FWfcGameData& other) const override { return Elements == reinterpret_cast<const FWfcGameData_MeshList&>(other).Elements; }
+    virtual uint32 Hash() const override { return GetTypeHash(Elements); }
+};
+WFCPP_UNREAL_TILE_GAME_DATA_TYPE_TRAITS(FWfcGameData_MeshList);

@@ -263,6 +263,17 @@ public:
 
     WFC::Tiled3D::Transform3D Unwrap() const { return { Invert, static_cast<WFC::Tiled3D::Rotations3D>(Rot) }; }
     FTransform ToFTransform() const;
+
+	bool Serialize(FArchive& ar)
+	{
+		auto id = Unwrap().GetID();
+		ar << id;
+		
+		if (ar.IsLoading())
+		    *this = WFC::Tiled3D::Transform3D::FromID(id);
+		
+		return true;
+	}
 	
 	FString ToString() const
 	{
@@ -273,6 +284,11 @@ public:
 		);
 	}
 };
+inline FArchive& operator<<(FArchive& ar, FWFC_Transform3D& tr)
+{
+	tr.Serialize(ar);
+	return ar;
+}
 inline uint32 GetTypeHash(const FWFC_Transform3D& t)
 {
 	return GetTypeHash(MakeTuple(t.Rot, t.Invert));
@@ -284,7 +300,8 @@ struct TStructOpsTypeTraits<FWFC_Transform3D> : public TStructOpsTypeTraitsBase2
 	{
 		WithZeroConstructor = true,
 		WithNoDestructor = true,
-		WithIdenticalViaEquality = true
+		WithIdenticalViaEquality = true,
+		WithSerializer = true
 	};
 };
 

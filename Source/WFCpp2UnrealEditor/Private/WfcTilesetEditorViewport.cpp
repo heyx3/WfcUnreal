@@ -34,7 +34,12 @@ TSharedRef<FEditorViewportClient> SWfcTilesetEditorViewport::MakeEditorViewportC
 
     return viewportClient.ToSharedRef();
 }
-TSharedPtr<SWidget> SWfcTilesetEditorViewport::MakeViewportToolbar()
+TSharedPtr<SWidget> SWfcTilesetEditorViewport::
+    #if WFCPP_UNREAL_NEW_VIEWPORT_TOOLBAR
+        BuildViewportToolbar()
+    #else
+        MakeViewportToolbar()
+    #endif
 {
     return SNew(SWfcTilesetEditorViewportToolBar, SharedThis(this))
             .Cursor(EMouseCursor::Default);

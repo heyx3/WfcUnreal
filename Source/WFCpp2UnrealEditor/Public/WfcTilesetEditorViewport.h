@@ -31,7 +31,13 @@ public:
     //SEditorViewport interface:
 protected:
     virtual TSharedRef<FEditorViewportClient> MakeEditorViewportClient() override;
-    virtual TSharedPtr<SWidget> MakeViewportToolbar() override;
+    #if (ENGINE_MAJOR_VERSION > 5) || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION > 6)
+        #define WFCPP_UNREAL_NEW_VIEWPORT_TOOLBAR 1
+        virtual TSharedPtr<SWidget> BuildViewportToolbar() override;
+    #else
+        #define WFCPP_UNREAL_NEW_VIEWPORT_TOOLBAR 0
+        virtual TSharedPtr<SWidget> MakeViewportToolbar() override;
+    #endif
 
     //Fields:
 private:

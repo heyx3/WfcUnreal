@@ -35,6 +35,7 @@ TUniquePtr<WfcTileVisualizer> WfcTileVisualizer::MakeVisualizer(const FWfcTileVi
 	return nullptr;
 }
 
+
 namespace WfcTileVisualizerStaticMesh
 {
 	static bool IsApplicable(const FWfcTileVisualizerInputs& inputs)
@@ -56,4 +57,36 @@ WfcTileVisualizer_StaticMesh::WfcTileVisualizer_StaticMesh(const FWfcTileVisuali
 				    inputs.TileTr)
 {
 	
+}
+
+
+namespace WfcTileVisualizerMeshList
+{
+	static bool IsApplicable(const FWfcTileVisualizerInputs& inputs)
+	{
+		auto* data = inputs.GetTileGameData();
+		return (data && data->GetScriptStruct() == FWfcGameData_MeshList::StaticStruct());
+	}
+	static TUniquePtr<WfcTileVisualizer> MakeViz(const FWfcTileVisualizerInputs& inputs)
+	{
+		return MakeUnique<WfcTileVisualizer_MeshList>(inputs);
+	}
+	
+	REGISTER_VISUALIZER_IN_CPP_FILE(WfcTileVisualizer_MeshList, IsApplicable, MakeViz);
+}
+WfcTileVisualizer_MeshList::WfcTileVisualizer_MeshList(const FWfcTileVisualizerInputs& inputs)
+	: WfcTileVisualizer(inputs)
+{
+	const auto& meshList = inputs.GetTileGameData()->Get<FWfcGameData_MeshList>();
+	for (const auto& mesh : meshList.Elements)
+	{
+		meshComponents.Emplace(
+			&inputs.EditorScene,
+			mesh.Mesh,
+			WfcppUnrealEditor::ComposeTransforms(
+				mesh.Permutation.ToFTransform(),
+				inputs.TileTr
+			)
+		);
+	}
 }

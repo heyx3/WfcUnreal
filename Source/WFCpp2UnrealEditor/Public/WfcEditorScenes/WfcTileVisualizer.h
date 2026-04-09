@@ -92,3 +92,12 @@ public:
 
 	FEditorMeshComponent meshComponent;
 };
+
+class WFCPP2UNREALEDITOR_API WfcTileVisualizer_MeshList : public WfcTileVisualizer
+{
+public:
+
+	WfcTileVisualizer_MeshList(const FWfcTileVisualizerInputs& inputs);
+
+	TArray<FEditorMeshComponent> meshComponents;
+};
