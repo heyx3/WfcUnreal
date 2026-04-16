@@ -148,10 +148,8 @@ public:
 	void GetTemperatureData(float& min, float& max,
 		  				    float& mean, float& median);
 	
-	//For the given cell face, if it can only be one kind of face,
-	//    returns that face.
-	//Note that if a face has symmetries,
-	//    then the specific permutation returned is arbitrary but deterministic.
+	//For the given cell face, if it can only be one kind of face, returns that face.
+	//Note that if a face has symmetries then the specific permutation returned is arbitrary but deterministic.
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
 	void GetFacePossibility(const FIntVector& cell, WFC_Directions3D face,
 							bool& exists, int& facePrototypeId, WFC_Transforms2D& facePermutation) const

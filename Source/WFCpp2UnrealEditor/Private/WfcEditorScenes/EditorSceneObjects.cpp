@@ -157,12 +157,6 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 	FVector faceLocalCenter{ 0, 0, 0 };
 	faceLocalCenter[faceIdx] = faceSign * cubeExtents;
 
-	//Compute a transform for the face's center, looking outward.
-	FTransform faceCenterLocalTr{
-		UKismetMathLibrary::MakeRotFromXZ(faceOutward, faceTangent2),
-		faceLocalCenter
-	};
-
 	//Some transform data should grow with the tile size.
 	double arrowThickness = 0.5 * FMath::Lerp(2.5, 10.0, FMath::GetRangePct(100.0, 1000.0, cubeExtents)),
 		   labelScale = FMath::Lerp(0.25, 1.0, FMath::GetRangePct(100.0, 1000.0, cubeExtents)),
@@ -171,29 +165,23 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 	
 	if (centerSphere.IsSet())
 		centerSphere->SetWorldTransformFromSequence(
-			FTransform{ FQuat::Identity, FVector::ZeroVector, FVector{ sphereSize } },
-			faceCenterLocalTr,
+			FTransform{ faceLocalRot, faceLocalCenter, FVector{ sphereSize } },
 			tileTr
 		);
 	
 	if (facePlane.IsSet())
 		facePlane->SetWorldTransformFromSequence(
-			FEditorPlaneComponent::GetTransform(
-				faceCenterLocalTr.GetLocation(),
-				FVector2D{ cubeExtents },
-				faceCenterLocalTr.GetRotation().GetForwardVector()
-			),
+			FEditorPlaneComponent::GetTransform(faceLocalCenter, FVector2D{ cubeExtents }, faceOutward),
 			tileTr
 		);
 
 	if (fallbackLabel.IsSet())
 		fallbackLabel->SetWorldTransformFromSequence(
 			FTransform{
-				FQuat::Identity,
-				FVector{ cubeExtents * 0.1, 0, 0 },
+				faceLocalRot,
+				faceLocalCenter + FVector{ cubeExtents * 0.1, 0, 0 },
 				FVector::OneVector * labelScale
 			},
-			faceCenterLocalTr,
 			tileTr
 		);
 
@@ -223,7 +211,7 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 				
 				cornerLabels[facePointTile]->SetWorldTransformFromSequence(
 					FTransform {
-						faceCenterLocalTr.GetRotation(),
+						faceLocalRot,
 						tileLocalLabelOffset,
 						FVector::OneVector * labelScale
 					},
@@ -233,7 +221,7 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 			if (cornerArrows[facePointTile].IsSet())
 			{
 				auto faceWorldTr = WfcppUnrealEditor::ComposeTransforms(
-					faceCenterLocalTr,
+					FTransform{ faceLocalRot, faceLocalCenter },
 					tileTr
 				);
 				auto arrowTr = FEditorArrowComponent::GetTransform(
@@ -279,10 +267,10 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 						FVector::ZeroVector,
 						FVector::OneVector * labelScale
 					},
-					faceCenterLocalTr,
+					FTransform{ faceLocalRot, faceLocalCenter },
 					FTransform{
 						FQuat::Identity,
-						tileLocalLabelOffset - faceCenterLocalTr.GetLocation(),
+						tileLocalLabelOffset - faceLocalCenter,
 						FVector::OneVector
 					},
 					tileTr
@@ -291,7 +279,7 @@ void FEditorSceneObject_WfcFace::RebuildTransform()
 			if (edgeArrows[facePoint].IsSet())
 			{
 				auto faceWorldTr = WfcppUnrealEditor::ComposeTransforms(
-					faceCenterLocalTr,
+					FTransform{ faceLocalRot, faceLocalCenter },
 					tileTr
 				);
 				auto arrowTr = FEditorArrowComponent::GetTransform(

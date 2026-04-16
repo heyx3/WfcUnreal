@@ -65,10 +65,11 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 	}
 	else if (Mode == EWfcTilesetEditorMode::OverrideGeneration &&
 			 overrideInitialState && (overrideInitialState->Tileset) &&
-			 !viewMode.IsType<FWfcTilesetEditorOverrideGeneration>())
+			 (!viewMode.IsType<FWfcTilesetEditorOverrideGeneration>() ||
+			   #define WFC_OG (viewMode.Get<FWfcTilesetEditorOverrideGeneration>())
+			    WFC_OG.InitialState.IsValid() != IsValid(overrideInitialState) || 
+			 	!UWfcGeneratorInitialState::CompareWfcInitialStates(WFC_OG.InitialState.Get(), overrideInitialState)))
 	{
-		check(currentViewMode != Mode);
-
 		viewMode.Emplace<FWfcTilesetEditorOverrideGeneration>(
 			*this, *owner,
 			FEditorSceneObject_WfcGeneration_Display{
