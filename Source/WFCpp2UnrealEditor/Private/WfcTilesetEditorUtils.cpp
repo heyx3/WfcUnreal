@@ -44,3 +44,15 @@ void WfcTilesetEditorUtils::DestroyPreviewSceneActor(AActor* actor, EDetachmentR
 
     //TODO: Call PurgeObjects again for the actor itself?
 }
+
+const TCHAR* WfcTilesetEditorUtils::GetCharAfter(const FString& source, const FString& toMatch)
+{
+    auto idx = source.Find(toMatch);
+    if (idx == INDEX_NONE)
+        return nullptr;
+
+    if (idx > source.Len() - 3)
+        return nullptr;
+        
+    return &source[idx+2];
+}

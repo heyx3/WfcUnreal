@@ -54,7 +54,10 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 			FEditorSceneObject_WfcGeneration_Display{
 				static_cast<float>(SpacingBetweenTiles),
 				FTransform{ },
-				DisplayFaceConstraintsInGeneration
+				DisplayFaceConstraintsInGeneration,
+				DisplayHotSpotsInGeneration,
+				DisplayUnsolvablesInGeneration,
+				DisplayBoringCellsInGeneration
 			},
 			tileset, GenerationSettings
 		);
@@ -75,7 +78,10 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 			FEditorSceneObject_WfcGeneration_Display{
 				static_cast<float>(SpacingBetweenTiles - tileset->TileLength),
 				FTransform{ },
-				DisplayFaceConstraintsInGeneration
+				DisplayFaceConstraintsInGeneration,
+				DisplayHotSpotsInGeneration,
+				DisplayUnsolvablesInGeneration,
+				DisplayBoringCellsInGeneration
 			},
 			overrideInitialState
 		);
@@ -163,7 +169,10 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 					FEditorSceneObject_WfcGeneration_Display{
 						static_cast<float>(SpacingBetweenTiles),
 						FTransform{ },
-						DisplayFaceConstraintsInGeneration
+						DisplayFaceConstraintsInGeneration,
+						DisplayHotSpotsInGeneration,
+						DisplayUnsolvablesInGeneration,
+						DisplayBoringCellsInGeneration
 					},
 					tileset, GenerationSettings
 				);
@@ -177,7 +186,10 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 						FEditorSceneObject_WfcGeneration_Display{
 							static_cast<float>(SpacingBetweenTiles),
 							FTransform{ },
-							DisplayFaceConstraintsInGeneration
+							DisplayFaceConstraintsInGeneration,
+							DisplayHotSpotsInGeneration,
+							DisplayUnsolvablesInGeneration,
+							DisplayBoringCellsInGeneration
 						},
 						overrideInitialState
 					);
@@ -211,7 +223,8 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 	{
 		auto& generatorManager = *GetGeneratorManager();
 
-		for (int rewindI = 0; rewindI < NRewindsToRun; ++rewindI)
+		//NOTE: the button may be clicked rapidly by the user, adding excess rewind commands before the button gets disabled.
+		for (int rewindI = 0; rewindI < NRewindsToRun && generatorManager.GetGenerator()->GetHistoryLength() > 0; ++rewindI)
 			generatorManager.Rewind();
 		NRewindsToRun = 0;
 		
@@ -221,7 +234,10 @@ void FWfcTilesetEditorScene::Refresh(UWfcTileset* tileset, TOptional<WfcTileID> 
 		generatorManager.ChangeSpace(FEditorSceneObject_WfcGeneration_Display{
 			static_cast<float>(SpacingBetweenTiles),
 			FTransform{ },
-			DisplayFaceConstraintsInGeneration
+			DisplayFaceConstraintsInGeneration,
+			DisplayHotSpotsInGeneration,
+			DisplayUnsolvablesInGeneration,
+			DisplayBoringCellsInGeneration
 		});
 		generatorManager.RefreshSettings(GenerationSettings);
 		

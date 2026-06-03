@@ -5,12 +5,14 @@
 #include "Components/SphereComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 #include "Algo/Count.h"
-
-#include "WfcTileset.h"
-#include "WfcGenerator.h"
-#include "WfcBpUtils.h"
-#include "WFCpp2UnrealEditor.h"
 #include "Algo/AllOf.h"
+
+#include "WFCpp2UnrealEditor.h"
+#include "WfcTileset.h"
+#include "WfcBpUtils.h"
+#include "WfcTilesetEditorUtils.h"
+#include "Algo/NoneOf.h"
+
 #include "WfcEditorScenes/WfcTileVisualizer.h"
 #include "WfcEditorScenes/WfcTilesetEditorScene.h"
 #include "WfcEditorScenes/WfcTilesetEditorViewportClient.h"
@@ -76,8 +78,10 @@ FEditorSceneObject_WfcFace::FEditorSceneObject_WfcFace(FPreviewScene* owner,
 	{
 		auto pointLocationPrototype = WFC::Tiled3D::TransformFaceCorner(
 			pointLocationTile,
-			static_cast<WFC::Tiled3D::Directions3D>(faceSide),
-			WFC::Invert(static_cast<WFC::Transformations>(facePermutation))
+			WFC::Tiled3D::FaceTransformOnSide(
+				static_cast<WFC::Tiled3D::Directions3D>(faceSide),
+				WFC::Invert(static_cast<WFC::Transformations>(facePermutation))
+			)
 		);
 		bool minAxis1 = WFC::Tiled3D::IsCornerFirstAxisMin(pointLocationTile),
 			 minAxis2 = WFC::Tiled3D::IsCornerSecondAxisMin(pointLocationTile);
@@ -106,8 +110,10 @@ FEditorSceneObject_WfcFace::FEditorSceneObject_WfcFace(FPreviewScene* owner,
 	{
 		auto pointLocationPrototype = WFC::Tiled3D::TransformFaceEdge(
 			pointLocationTile,
-			static_cast<WFC::Tiled3D::Directions3D>(faceSide),
-			WFC::Invert(static_cast<WFC::Transformations>(facePermutation))
+			WFC::Tiled3D::FaceTransformOnSide(
+				static_cast<WFC::Tiled3D::Directions3D>(faceSide),
+				WFC::Invert(static_cast<WFC::Transformations>(facePermutation))
+			)
 		);
 		bool parallelAxis1 = WFC::Tiled3D::IsEdgeParallelToFirstAxis(pointLocationTile),
 		     minEdge = WFC::Tiled3D::IsEdgeOnMinSide(pointLocationTile);
@@ -774,6 +780,7 @@ void FEditorSceneObject_WfcGeneration::RefreshViz()
 	//Clear out any previous visualization.
 	setCells.Empty();
 	unsetCells.Empty();
+	unsolvableCells.Empty();
 	if (!tileset.IsValid() || !generator)
 		return;
 
@@ -895,7 +902,84 @@ void FEditorSceneObject_WfcGeneration::RefreshViz()
 						})
 					);
 				}
-				else if (minInterestingTemperature > 0 && cellData.Temperature >= minInterestingTemperature)
+				else if (currentDisplay.ShowUnsolvable && !cellData.IsSet && cellData.IfUnset.NPossibilities < 1)
+				{
+					//See what's going on with each face.
+					decltype(FUnsolvableCell::FaceData) facesData;
+					for (auto face : TEnumRange<WFC_Directions3D>{ })
+						facesData[static_cast<int>(face)] = generator->GetFacePossibilities({ x, y, z }, face);
+
+					//Generate a terse text description of this cell's location and problems.
+					auto label = FString::Printf(
+						TEXT("!!! %i,%i,%i !!!"),
+						x, y, z
+					);
+					for (auto face : TEnumRange<WFC_Directions3D>{ })
+					{
+						auto& faceData = facesData[static_cast<int>(face)];
+						if (faceData.IsUnsolvable)
+						{
+							if (faceData.IsPermanentlyUnsolvable)
+							{
+								label += FString::Printf(TEXT("\n%s is Unsolvable by initial constraints!"),
+													     *UEnum::GetValueAsString(face));
+							}
+							else
+							{
+								label += FString::Printf(
+									TEXT("\n%s is Unsolvable (set: [ %s%s%s%s%s ])"),
+									*UEnum::GetValueAsString(face),
+									faceData.Self.IsSet() ? TEXT("Self") : TEXT(""),
+									(faceData.Self.IsSet() && faceData.Neighbor.IsSet()) ? TEXT(";") : TEXT(""),
+									faceData.Neighbor.IsSet() ? TEXT("Nghbr") : TEXT(""),
+									(faceData.Neighbor.IsSet() || (!faceData.Neighbor.IsSet() && faceData.Self.IsSet())) ? TEXT(";") : TEXT(""),
+									faceData.InitialConstraints.IsSet() ? TEXT("InitCnstrts") : TEXT("")
+								);
+							}
+						}
+						else if (faceData.TryGetFace())
+						{
+							auto& forcedFace = *faceData.TryGetFace();
+							label += FString::Printf(
+								TEXT("\n%s %s be '%s'%s%s"),
+								WfcTilesetEditorUtils::GetCharAfter(UEnum::GetValueAsString(face), "::"),
+								faceData.InitialConstraints.IsSet() ? TEXT("*must*") : TEXT("will"),
+								*tileset->FacePrototypes[forcedFace.FacePrototypeID].Nickname,
+								(forcedFace.FacePermutation == WFC_Transforms2D::None) ?
+								    TEXT("") :
+								    TEXT("/"),
+								(forcedFace.FacePermutation == WFC_Transforms2D::None) ?
+								    TEXT("") :
+								    WfcTilesetEditorUtils::GetCharAfter(UEnum::GetValueAsString(forcedFace.FacePermutation), "::")
+							);
+						}
+						else if (faceData.HasLighterConstraints)
+						{
+							label += FString::Printf(
+								TEXT("\n(lighter %s constraints)"),
+								WfcTilesetEditorUtils::GetCharAfter(UEnum::GetValueAsString(face), "::")
+							);
+						}
+					}
+					//If all individual faces are OK, then it must be the combination of faces that's illegal.
+					if (Algo::NoneOf(facesData, [&](const auto& faceData) { return faceData.IsUnsolvable; }))
+					{
+						//TODO: Assert that there is no matching tile (is this actually worth it?)
+						label += TEXT("\n! No tile matches the above constraints !");
+					}
+
+					auto& cellViz = unsolvableCells.Add({ x, y, z }, FUnsolvableCell{
+						FEditorTextComponent{
+							Owner,
+							cellWorldTr, label, FColor::Purple,
+							EHTA_Center, EVRTA_TextCenter
+						},
+						facesData,
+						MoveTemp(faceConstraintsViz)
+					});
+					cellViz.MarkerViz->GetComponent()->SetWorldSize(tileset->TileLength / 15);
+				}
+				else if (currentDisplay.ShowHotSpots && minInterestingTemperature > 0 && cellData.Temperature >= minInterestingTemperature)
 				{
 					FLinearColor entropyColor = FLinearColor::Black;
 					auto entropyLabel = FString::Printf(
@@ -940,28 +1024,43 @@ void FEditorSceneObject_WfcGeneration::RefreshViz()
 							std::move(faceConstraintsViz)
 						})
 					);
-					cellViz.EntropyViz->GetComponent()->SetWorldSize(tileset->TileLength / 100);
+					cellViz.EntropyViz->GetComponent()->SetWorldSize(tileset->TileLength / 15);
 				}
 				else
 				{
-					unsetCells.Add(
-					    { x, y, z },
-					    std::move(FUnsetCell{
-					    	cellData.Temperature,
-					    	NullOpt, NullOpt,
-					    	FEditorWireSphereComponent{
-					    		Owner,
-					    		WfcppUnrealEditor::ComposeTransforms(
-					    			FTransform{ FQuat::Identity, FVector::ZeroVector,
-					    						FVector::OneVector * tileSeparation / 18.0f },
-					    			cellWorldTr
-					    		),
-					    		FLinearColor{ 0.8f, 0.6f, 0.3f }.ToFColorSRGB()
-					    	},
-					    	MoveTemp(unsolvableViz),
-							std::move(faceConstraintsViz)
-					    })
-					);
+					if (currentDisplay.ShowBoring)
+					{
+						unsetCells.Add(
+							{ x, y, z },
+							std::move(FUnsetCell{
+								cellData.Temperature,
+								NullOpt, NullOpt,
+								FEditorWireBoxComponent{
+									Owner,
+									WfcppUnrealEditor::ComposeTransforms(
+										FTransform{ FQuat::Identity, FVector::ZeroVector,
+													FVector::OneVector * tileset->TileLength / 2.0f },
+										cellWorldTr
+									),
+									FLinearColor{ 0.8f, 0.6f, 0.3f }.ToFColorSRGB()
+								},
+								MoveTemp(unsolvableViz),
+								std::move(faceConstraintsViz)
+							})
+						);
+					}
+					else
+					{
+						unsetCells.Add(
+							{ x, y, z },
+							std::move(FUnsetCell{
+								cellData.Temperature,
+								NullOpt, NullOpt, NullOpt,
+								MoveTemp(unsolvableViz),
+								std::move(faceConstraintsViz)
+							})
+						);
+					}
 				}
 			}
 }

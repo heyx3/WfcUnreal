@@ -214,6 +214,8 @@ void UWfcGenerator::SetCell(const FIntVector& cell,
 		return;
 	}
 
+	if (permanent && FMath::Abs(FVector::Dist(FVector{ cell }, FVector{ 2, 9, 5 }) - 1.0) < 0.0001)
+		__debugbreak();
 	state->SetCell({ cell.X, cell.Y, cell.Z },
 				   wfcLibraryData.WfcTileIDByUnrealID[unrealTileID],
 				   permutation.Unwrap(), permanent);
@@ -259,7 +261,7 @@ void UWfcGenerator::SetCellNot(const FIntVector& cell,
 
 void UWfcGenerator::SetFace(const FIntVector& cell, WFC_Directions3D face,
                             int facePrototypeId, WFC_Transforms2D facePermutationOrientation)
-{
+{	
 	if (!IsRunning())
 	{
 		UE_LOG(LogWFCpp, Error, TEXT("Can't set a WFC grid cell's face, because the generator isn't running!"));
@@ -342,11 +344,24 @@ void UWfcGenerator::AddConstraints(const TArray<TInstancedStruct<FWfcConstraintE
 	}
 	check(state.IsSet());
 
+	//DEBUG:
+	UE_LOG(LogWFCpp, Warning, TEXT("DEBUG// Starting constraints..."));
 	for (const auto& constraintEntry : constraints)
 	{
 		if (constraintEntry.GetScriptStruct() == FWfcConstraintEntry_Face::StaticStruct())
 		{
 			const auto& face = constraintEntry.Get<FWfcConstraintEntry_Face>();
+			//DEBUG:
+			if (face.Cell == FIntVector{ 4, 9, 5 } ||
+				(WFC::Vector3i{ face.Cell.X, face.Cell.Y, face.Cell.Z } + WFC::Tiled3D::GetFaceDirection((WFC::Tiled3D::Directions3D)face.Side)) == WFC::Vector3i{4, 9, 5})
+			{
+				UE_LOG(LogWFCpp, Warning, TEXT("DEBUG// %s the %s face of '%s'/%s at %i,%i,%i"),
+					   face.IsForbidding ? TEXT("Forbidding") : TEXT("Guaranteeing"),
+					   *UEnum::GetValueAsString(face.Side).RightChop(18),
+					   *tileset->FacePrototypes[face.FacePrototypeId].Nickname,
+					   *UEnum::GetValueAsString(face.FacePrototypeTransform).RightChop(18),
+					   face.Cell.X, face.Cell.Y, face.Cell.Z);
+			}
 			SetFaceConstraint(
 				face.Cell, face.Side,
 				face.FacePrototypeId, face.FacePrototypeTransform,
@@ -356,6 +371,16 @@ void UWfcGenerator::AddConstraints(const TArray<TInstancedStruct<FWfcConstraintE
 		else if (constraintEntry.GetScriptStruct() == FWfcConstraintEntry_Cell::StaticStruct())
 		{
 			const auto& cell = constraintEntry.Get<FWfcConstraintEntry_Cell>();
+			//DEBUG:
+			if (FVector::Dist(FVector{ cell.Cell }, FVector{ 4, 9, 5 }) < 1.0001)
+			{
+				UE_LOG(LogWFCpp, Warning, TEXT("DEBUG// %s the cell at %i,%i,%i to '%s'/%s/%s"),
+					   cell.IsForbidding ? TEXT("Forbidding") : TEXT("Guaranteeing"),
+					   cell.Cell.X, cell.Cell.Y, cell.Cell.Z,
+					   *tileset->Tiles[cell.TileId].GetDisplayName(),
+					   cell.TilePermutation.Invert ? TEXT("inv") : TEXT(""),
+					   *UEnum::GetValueAsString(cell.TilePermutation.Rot).RightChop(17));
+			}
 			SetCellConstraint(
 				cell.Cell,
 				cell.TileId, cell.TilePermutation,
@@ -409,16 +434,62 @@ void UWfcGenerator::GetTemperatureData(float& out_min, float& out_max,
 	out_median = (sortedValues.IsEmpty() ? 0 : sortedValues[sortedValues.Num() / 2]);
 }
 
-TOptional<TTuple<int, WFC_Transforms2D>> UWfcGenerator::GetFacePossibility(FIntVector cellPos,
-																		   WFC_Directions3D face) const
+void UWfcGenerator::ForcedCellFaceSources::InitNeighbor(const ForcedCellFace& force)
 {
+	check(!Neighbor.IsSet());
+	Neighbor = force;
+
+	IsUnsolvable |= (Self.IsSet() && !Self->CompatibleWith(force));
+	IsUnsolvable |= (InitialConstraints.IsSet() && !InitialConstraints->CompatibleWith(force));
+}
+
+void UWfcGenerator::ForcedCellFaceSources::InitSelf(const ForcedCellFace& force)
+{
+	check(!Self.IsSet());
+	Self = force;
+
+	IsUnsolvable |= (Neighbor.IsSet() && !Neighbor->CompatibleWith(force));
+	IsUnsolvable |= (InitialConstraints.IsSet() && !InitialConstraints->CompatibleWith(force));
+}
+
+void UWfcGenerator::ForcedCellFaceSources::AddInitialConstraint(const ForcedCellFace& force)
+{
+	if (IsPermanentlyUnsolvable)
+	{
+		check(!InitialConstraints.IsSet());
+		return;
+	}
+	else if (InitialConstraints.IsSet())
+	{
+		if (!InitialConstraints->CompatibleWith(force))
+		{
+			InitialConstraints.Reset();
+			IsPermanentlyUnsolvable = true;
+		}
+	}
+	else
+	{
+		InitialConstraints = force;
+
+		IsUnsolvable |= (Self.IsSet() && !Self->CompatibleWith(force));
+		IsUnsolvable |= (Neighbor.IsSet() && !Neighbor->CompatibleWith(force));
+	}
+}
+
+UWfcGenerator::ForcedCellFaceSources UWfcGenerator::GetFacePossibilities(FIntVector cellPos, WFC_Directions3D face) const
+{
+	ForcedCellFaceSources output;
+	
 	if (!state)
 	{
-		UE_LOG(LogWFCpp, Error,
-			   TEXT("Tried to call UWfcGenerator::GetFacePossibility before the generator is running!"));
-		return NullOpt;
+		UE_LOG(LogWFCpp, Error, TEXT("Tried to call UWfcGenerator::GetFacePossibilities before the generator is running!"));
+		return output;
 	}
 
+	auto faceWfc = static_cast<WFC::Tiled3D::Directions3D>(face),
+		 oppositeFaceWfc = WFC::Tiled3D::GetOpposite(faceWfc);
+	auto oppositeFace = static_cast<WFC_Directions3D>(oppositeFaceWfc);
+	
 	//Wrap the given cell coordinate if applicable, then check that it's valid.
 	auto cellPosWfc = state->Grid.FilterPos({ cellPos.X, cellPos.Y, cellPos.Z });
 	cellPos = { cellPosWfc.x, cellPosWfc.y, cellPosWfc.z };
@@ -426,47 +497,215 @@ TOptional<TTuple<int, WFC_Transforms2D>> UWfcGenerator::GetFacePossibility(FIntV
 	{
 		UE_LOG(
 			LogWFCpp, Error,
-			TEXT("Your cell pos %s is out of range of the grid (size %s)!"),
+			TEXT("UWfcGenerator::GetFacePossibilities(): "
+					"Your cell pos %s is out of range of the grid (size %s)!"),
 			*cellPos.ToString(),
 			*FIntVector(state->Grid.Cells.GetWidth(),
-					    state->Grid.Cells.GetHeight(),
+						state->Grid.Cells.GetHeight(),
 						state->Grid.Cells.GetDepth()).ToString()
 		);
-		return NullOpt;
+		return output;
 	}
+	//Get the neighbor's position too.
+	auto cellPosNeighborWfc = cellPosWfc;
+	cellPosNeighborWfc = state->Grid.FilterPos(cellPosWfc + WFC::Tiled3D::GetFaceDirection(faceWfc));
+	FIntVector cellPosNeighbor{ cellPosNeighborWfc.x, cellPosNeighborWfc.y, cellPosNeighborWfc.z }; 
+	bool neighborExists = state->Grid.Cells.IsIndexValid(cellPosNeighborWfc);
 
-	//Helper function that actually finds the Unreal face data.
+	//Lambda that gets the WFC library face data, for a specific tile permutation,
+	//  on the face being queried.
 	auto generateResult = [&](WFC::Tiled3D::TileIdx tile, WFC::Tiled3D::Transform3D tilePermutation) {
 		auto permutedCube = tilePermutation.ApplyToCube(state->Grid.InputTiles[tile].Data);
-		auto permutedFace = permutedCube.Faces[permutedCube.GetFace(static_cast<WFC::Tiled3D::Directions3D>(face))];
-		return wfcLibraryData.ToUnrealFace(permutedFace, tileset);
+		auto permutedFace = permutedCube.Faces[permutedCube.GetFace(faceWfc)];
+		return permutedFace;
 	};
-	
-	//If the cell is already set, just grab its current face.
-	//This isn't merely an optimization: the usual lookup is undefined after a cell is set.
+
+	//Check whether this cell is set.
 	const auto& cell = state->Grid.Cells[{ cellPos.X, cellPos.Y, cellPos.Z }];
 	if (cell.IsSet())
-		return generateResult(cell.ChosenTile, cell.ChosenPermutation);
-	
-	//Look for the supported face on that cell;
-	//    if we find a second one then immediately give up.
-	WFC::Vector3i wfcCell{ cellPos.X, cellPos.Y, cellPos.Z };
-	TOptional<TTuple<WfcFacePrototypeID, WFC_Transforms2D>> currentResult;
-	for (int wfcTileI = 0; wfcTileI < state->Grid.InputTiles.size(); ++wfcTileI)
 	{
-		for (auto permutation : state->Grid.PossiblePermutations[{ wfcTileI, wfcCell }])
+		auto faceData = generateResult(cell.ChosenTile, cell.ChosenPermutation);
+		auto faceDataU = wfcLibraryData.ToUnrealFace(faceData, tileset);
+		output.InitSelf({faceDataU->Key, faceDataU->Value });
+	}
+
+	//Check whether the neighbor's cell is set.
+	const auto* neighborCellPtr = neighborExists ? &state->Grid.Cells[cellPosNeighborWfc] : nullptr;
+	if (neighborCellPtr && neighborCellPtr->IsSet())
+	{
+		auto faceData = generateResult(neighborCellPtr->ChosenTile, neighborCellPtr->ChosenPermutation);
+		auto faceDataU = wfcLibraryData.ToUnrealFace(faceData, tileset);
+		output.InitSelf({ faceDataU->Key, faceDataU->Value });
+	}
+
+	//Gather user constraints for this face.
+	//Constraints that set a face to a value are obviously important,
+	//    but it's also possible to force a face by outlawing all the others.
+	check(facePermutationsBuffer.IsEmpty());
+	auto& nonForbiddenFaces = facePermutationsBuffer;
+	for (const auto& kvp : tileset->FacePrototypes)
+		nonForbiddenFaces.Add(kvp.Key, WFC::TransformationFlags::All());
+	auto countNonForbiddenFaces = [&]() {
+		return Algo::Accumulate(nonForbiddenFaces, 0,
+							    [&](int count, const auto& kvp) { return count + kvp.Value; });
+	};
+	int initialNonForbiddenFacesCount = countNonForbiddenFaces();
+	//
+	for (const auto& _constraint : GetConstraintHistory())
+	{
+		//Exit early if conflicting constraints have already been found.
+		if (output.IsPermanentlyUnsolvable)
+			break;
+
+		if (_constraint.GetScriptStruct() == FWfcConstraintEntry_Face::StaticStruct() ||
+			_constraint.GetScriptStruct() == FWfcConstraintEntry_Cell::StaticStruct())
 		{
-			auto newResult = generateResult(wfcTileI, permutation);
-			check(newResult.IsSet());
+			FIntVector constraintCellPos;
+			WFC_Directions3D constraintAffectedFace;
+			if (_constraint.GetScriptStruct() == FWfcConstraintEntry_Face::StaticStruct())
+			{
+				auto& constraint = _constraint.Get<FWfcConstraintEntry_Face>();
+				constraintCellPos = constraint.Cell;
+				constraintAffectedFace = constraint.Side;
+			}
+			else
+			{
+				auto& constraint = _constraint.Get<FWfcConstraintEntry_Cell>();
+				constraintCellPos = constraint.Cell;
+				constraintAffectedFace = (constraintCellPos == cellPos) ? face : oppositeFace;
+			}
+
+			//Is this constraint relevant?
+			if ((constraintCellPos != cellPos && constraintCellPos != cellPosNeighbor) ||
+				(constraintCellPos == cellPos && constraintAffectedFace != face) ||
+				(constraintCellPos == cellPosNeighbor && constraintAffectedFace != oppositeFace))
+			{
+				continue;
+			}
+
+			//Extract more info now that we know it's relevant.
+			bool constraintIsForbidding;
+			WfcFacePrototypeID constraintFaceID;
+			WFC_Transforms2D constraintFacePermutation;
+			if (_constraint.GetScriptStruct() == FWfcConstraintEntry_Face::StaticStruct())
+			{
+				auto& constraint = _constraint.Get<FWfcConstraintEntry_Face>();
+				constraintIsForbidding = constraint.IsForbidding;
+				constraintFaceID = constraint.FacePrototypeId;
+				constraintFacePermutation = constraint.FacePrototypeTransform;
+			}
+			else
+			{
+				auto& constraint = _constraint.Get<FWfcConstraintEntry_Cell>();
+				constraintIsForbidding = constraint.IsForbidding;
+
+				//Figure out the face data for this permuted tile.
+				auto wfcTileID = wfcLibraryData.WfcTileIDByUnrealID[constraint.TileId];
+				auto permutedWfcFace = WFC::Tiled3D::GetFace(
+					wfcLibraryData.Tiles[wfcTileID].Data,
+					constraint.TilePermutation.Unwrap(),
+					static_cast<WFC::Tiled3D::Directions3D>(constraintAffectedFace)
+				);
+				auto unrealFace = wfcLibraryData.ToUnrealFace(permutedWfcFace, tileset);
+
+				constraintFaceID = unrealFace->Get<0>();
+				constraintFacePermutation = unrealFace->Get<1>();
+			}
 			
-			if (currentResult != *newResult)
-				if (currentResult.IsSet())
-					return NullOpt;
-				else
-					currentResult = *newResult;
+			auto wfcSide = static_cast<WFC::Tiled3D::Directions3D>(constraintAffectedFace);
+			auto wfcPermutation = static_cast<WFC::Transformations>(constraintFacePermutation);
+			bool permutationIsInverted = !WFC::Tiled3D::IsFaceLeftHanded(wfcSide);
+			auto wfcLocalPermutation = permutationIsInverted ? WFC::Invert(wfcPermutation) : wfcPermutation;
+			
+			if (constraintIsForbidding)
+			{
+				//Go through all symmetric permutations of this constraint's chosen face,
+				//    and remove them.
+				if (nonForbiddenFaces.Contains(constraintFaceID))
+				{
+					auto wfcFace = wfcLibraryData.ToWfcFace(constraintFaceID,
+															tileset->FacePrototypes[constraintFaceID]);
+
+					auto& permutationsLeft = nonForbiddenFaces[constraintFaceID];
+					wfcFace.ForEachSymmetry(wfcLocalPermutation, [&](WFC::Transformations localSymmPerm) {
+						auto symmPerm = permutationIsInverted ? WFC::Invert(localSymmPerm) : localSymmPerm;
+						permutationsLeft -= symmPerm;
+					});
+					
+					if (permutationsLeft.IsEmpty())
+						nonForbiddenFaces.Remove(constraintFaceID);
+				}
+			}
+			else
+			{
+				//For consistency we must use the first permutation that's symmetric with this face.
+				WFC_Transforms2D consistentPerm = WFC_Transforms2D::None;
+				auto wfcFace = wfcLibraryData.ToWfcFace(constraintFaceID,
+														tileset->FacePrototypes[constraintFaceID]);
+				wfcFace.ForEachSymmetry(wfcPermutation, [&](WFC::Transformations p) {
+					consistentPerm = static_cast<WFC_Transforms2D>(p);
+					return true; //Exit after the first iteration
+				});
+				
+				output.AddInitialConstraint({ constraintFaceID, consistentPerm });
+			}
 		}
 	}
-	return currentResult;
+
+	//Now process the forbidden faces and see if it's been narrowed down to a single face.
+	bool foundSingleFace = false;
+	if (nonForbiddenFaces.Num() == 1)
+	{
+		auto onlyFaceID = nonForbiddenFaces.begin()->Key;
+		auto facePermutations = nonForbiddenFaces.begin()->Value;
+		auto firstListedPermutation = *facePermutations.GetFirstElement();
+
+		//Is every allowed permutation symmetric to the first one?
+		//If so, then this is a single forced face we can submit.
+		auto differentPermutationsFromFirst = facePermutations;
+		TOptional<WFC::Transformations> firstSymmetricPermutation;
+		tileset->FacePrototypes[onlyFaceID]
+				  .Unwrap(wfcLibraryData.WfcFacePrototypeFirstIDs[onlyFaceID])
+				  .ForEachSymmetry(firstListedPermutation, [&](WFC::Transformations symmetricPerm)
+		{
+			if (!firstSymmetricPermutation)
+				firstSymmetricPermutation = symmetricPerm;
+			differentPermutationsFromFirst -= symmetricPerm;
+		});
+		
+		if (differentPermutationsFromFirst.IsEmpty())
+		{
+			foundSingleFace = true;
+			output.AddInitialConstraint({ onlyFaceID, static_cast<WFC_Transforms2D>(*firstSymmetricPermutation) });
+		}
+	}
+	if (!foundSingleFace)
+	{
+		//If the forbidden faces didn't single out one possible face, it's still possible they contradict other constraints.
+		//TODO: Implement.
+		if (false)
+		{
+			
+		}
+		//Otherwise, there are some constraints we can't properly capture in the output.
+		else
+		{
+			output.HasLighterConstraints = countNonForbiddenFaces() < initialNonForbiddenFacesCount;
+		}
+	}
+	nonForbiddenFaces.Empty();
+
+	return output;
+}
+TOptional<TTuple<int, WFC_Transforms2D>> UWfcGenerator::GetFacePossibility(FIntVector cellPos,
+																		   WFC_Directions3D face) const
+{
+	auto output = GetFacePossibilities(cellPos, face);
+	auto* facePtr = output.TryGetFace();
+	if (facePtr)
+		return MakeTuple(facePtr->FacePrototypeID, facePtr->FacePermutation);
+	else
+		return NullOpt;
 }
 
 void UWfcGenerator::Start(const UWfcTileset* tiles,

@@ -4,6 +4,8 @@
 #include "WfcTileset.h"
 #include "WfcConstraintHistory.h"
 
+#include <functional>
+
 #include "WfcGenerator.generated.h"
 
 
@@ -36,6 +38,7 @@ struct FWfcCellUnset
 	GENERATED_BODY()
 public:
 
+	//A value < 1 means the cell is unsolvable.
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	int NPossibilities = 0;
 };
@@ -84,7 +87,7 @@ public:
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
 	FIntVector GetGridSize() const;
 	
-	//Creates a data-object reprsenting this generator's startup parameters,
+	//Creates a data-object representing this generator's startup parameters,
 	//    including any constraints you've set.
 	UFUNCTION(BlueprintCallable, BlueprintPure=false, Category="WFC/Algorithm")
 	class UWfcGeneratorInitialState* SerializeInitialState(UObject* owner = nullptr,
@@ -147,14 +150,113 @@ public:
 	UFUNCTION(BlueprintCallable, Category="WFC/Algorithm")
 	void GetTemperatureData(float& min, float& max,
 		  				    float& mean, float& median);
+
+	//Given a specific cell face, this represents a tile/face that is forced to be there.
+	//The face permutation must always be the first matching one so that
+	//   we don't have to worry about symmetry when checking if two instances are compatible.
+	struct ForcedCellFace
+	{
+		int FacePrototypeID;
+		WFC_Transforms2D FacePermutation;
+
+		bool CompatibleWith(const ForcedCellFace& otherForce) const
+		{
+			return FacePrototypeID == otherForce.FacePrototypeID &&
+				   FacePermutation == otherForce.FacePermutation;
+		}
+	};
+	//Stores all the potential ways that a cell face may be forced to take a specific value.
+	struct ForcedCellFaceSources
+	{
+		//Represents the neighboring cell across this face which has chosen a tile already. 
+		TOptional<ForcedCellFace> Neighbor;
+		//Represents this own cell which has chosen a tile already.
+		TOptional<ForcedCellFace> Self;
+
+		//Not set if there are multiple conflicting constraints (see 'IsPermanentlyUnsolvable').
+		TOptional<ForcedCellFace> InitialConstraints;
+		//If true, there are conflicting Initial Constraints that make this cell permanently unsolvable.
+		//In this case, 'InitialConstraints' is left unset since there is no single value it can have.
+		bool IsPermanentlyUnsolvable = false;
+		//If true, there are some less-strict constraints not represented in this struct
+		//   (e.g. constraints forbidding a particular kind of face).
+		bool HasLighterConstraints = true;
+
+		//True if more than one of these sources is set and they disagree with each other
+		//  (or 'IsPermanentlyUnsolvable' is true).
+		bool IsUnsolvable = false;
+
+		void InitNeighbor(const ForcedCellFace& force);
+		void InitSelf(const ForcedCellFace& force);
+		void AddInitialConstraint(const ForcedCellFace& force);
+
+		//If this struct has exactly one forced cell face (i.e. not unsolvable and not empty), returns a reference to it.
+		//Otherwise returns null.
+		const ForcedCellFace* TryGetFace() const
+		{
+			if (IsUnsolvable)
+				return nullptr;
+			else if (Neighbor.IsSet())
+				return Neighbor.GetPtrOrNull();
+			else if (Self.IsSet())
+				return Self.GetPtrOrNull();
+			else
+				return InitialConstraints.GetPtrOrNull();
+		}
+	};
+	//For the given cell face, gathers all the ways in which a certain tile/face must be placed there.
+	//
+	//Not thread-safe (i.e. don't run this more than once at a time).
+	ForcedCellFaceSources GetFacePossibilities(FIntVector cellPos, WFC_Directions3D face) const;
+	//(BP overload; not recommended in C++).
+	//
+	//For the given cell face, reports any constraints which force that face to take a certain value.
+	//
+	//Also reports if the constraints are conflicting (making it unsolvable),
+	//   and whether that unsolvability goes all the way back to the initial constraints (making it permanent).
+	//
+	//Not thread-safe (i.e. don't run this more than once at a time).
+	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
+	void GetFacePossibilities(const FIntVector& cellPos, WFC_Directions3D face,
+							  bool& isUnsolvable, bool& unsolvabilityIsPermanent,
+							  int& solvedFacePrototypeID, WFC_Transforms2D& solvedFacePermutation,
+							  bool& solvedByNeighborCell, bool& solvedBySelfCell, bool& solvedByInitialConstraints) const
+	{
+		auto result = GetFacePossibilities(cellPos, face);
+		
+		isUnsolvable = result.IsUnsolvable;
+		unsolvabilityIsPermanent = result.IsPermanentlyUnsolvable;
+		solvedByNeighborCell = result.Neighbor.IsSet();
+		solvedBySelfCell = result.Self.IsSet();
+		solvedByInitialConstraints = result.InitialConstraints.IsSet();
+		
+		if (!isUnsolvable)
+		{
+			ForcedCellFace* source;
+			if (solvedByNeighborCell)
+				source = result.Neighbor.GetPtrOrNull();
+			else if (solvedBySelfCell)
+				source = result.Self.GetPtrOrNull();
+			else
+			{
+				check(solvedByInitialConstraints);
+				source = result.InitialConstraints.GetPtrOrNull();
+			}
+
+			solvedFacePrototypeID = source->FacePrototypeID;
+			solvedFacePermutation = source->FacePermutation;
+		}
+	}
 	
+	//(BP overload; not recommended in C++).
+	//
 	//For the given cell face, if it can only be one kind of face, returns that face.
 	//Note that if a face has symmetries then the specific permutation returned is arbitrary but deterministic.
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
-	void GetFacePossibility(const FIntVector& cell, WFC_Directions3D face,
+	void GetFacePossibility(const FIntVector& cellPos, WFC_Directions3D face,
 							bool& exists, int& facePrototypeId, WFC_Transforms2D& facePermutation) const
 	{
-		auto result = GetFacePossibility(cell, face);
+		auto result = GetFacePossibility(cellPos, face);
 		exists = result.IsSet();
 		if (exists)
 		{
@@ -171,7 +273,7 @@ public:
 	//    returns that face (as its prototype ID and permutation).
 	//Note that if a face has symmetries,
 	//    then the specific permutation returned is arbitrary but deterministic.
-	TOptional<TTuple<int, WFC_Transforms2D>> GetFacePossibility(FIntVector cell,
+	TOptional<TTuple<int, WFC_Transforms2D>> GetFacePossibility(FIntVector cellPos,
 																WFC_Directions3D face) const;
 
 	UFUNCTION(BlueprintCallable, BlueprintPure, Category="WFC/Algorithm")
@@ -337,6 +439,9 @@ private:
 	TArray<WFC::Tiled3D::StandardRunner> stateHistoryBuffer;
 
 	TArray<TInstancedStruct<FWfcConstraintEntry>> constraintsInOrder;
+
+	//Used internally for some functions.
+	mutable TMap<int, WFC::TransformationFlags> facePermutationsBuffer;
 };
 
 

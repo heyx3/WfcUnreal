@@ -14,4 +14,6 @@ namespace WfcTilesetEditorUtils
         AActor*,
         EDetachmentRule rule = EDetachmentRule::KeepWorld
     );
+
+    extern WFCPP2UNREALEDITOR_API const TCHAR* GetCharAfter(const FString& source, const FString& toMatch);
 }

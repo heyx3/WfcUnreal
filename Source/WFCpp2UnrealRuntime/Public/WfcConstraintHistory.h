@@ -34,34 +34,18 @@ public:
     bool IsForbidding = false;
 
     
-    //Converts the affected face from Unreal data to core WFCpp data.
-    //TODO: Pull the core parts into a WFC utility function
+    //Converts the affected face from Unreal data to core library data,
+    //    and applies the given permutation to it.
     static WFC::Tiled3D::FaceIdentifiers UnwrapFacePermutation(WFC_Directions3D side,
                                                                WFC_Transforms2D faceTransform,
                                                                const FWfcFacePrototype& facePrototype,
                                                                int firstWfcIDForFace)
     {
-        auto rawPoints = facePrototype.Unwrap(firstWfcIDForFace),
-             permutedPoints = rawPoints;
-
-        for (auto srcPoint : WFC::Tiled3D::ALL_FACE_POINTS)
-        {
-            auto destCornerPoint = WFC::Tiled3D::TransformFaceCorner(
-                srcPoint,
-                static_cast<WFC::Tiled3D::Directions3D>(side),
-                static_cast<WFC::Transformations>(faceTransform)
-            );
-            permutedPoints.Corners[destCornerPoint] = rawPoints.Corners[srcPoint];
-
-            auto destEdgePoint = WFC::Tiled3D::TransformFaceEdge(
-                srcPoint,
-                static_cast<WFC::Tiled3D::Directions3D>(side),
-                static_cast<WFC::Transformations>(faceTransform)
-            );
-            permutedPoints.Edges[destEdgePoint] = rawPoints.Edges[srcPoint];
-        }
-
-        return permutedPoints;
+        auto faceTransformWfc = WFC::Tiled3D::FaceTransformOnSide(
+            static_cast<WFC::Tiled3D::Directions3D>(side),
+            static_cast<WFC::Transformations>(faceTransform)
+        );
+        return facePrototype.Unwrap(firstWfcIDForFace).TransformedBy(faceTransformWfc);
     }
 };
 

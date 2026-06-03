@@ -503,7 +503,70 @@ TSharedRef<SDockTab> FWfcTilesetEditor::GenerateEditorSettingsTab(const FSpawnTa
 						  })
 					]
 				]
+				//Some more generation display settings
+				+ SScrollBox::Slot()
+				[
+					SNew(SHorizontalBox)
+						.Visibility_Lambda(showIfGeneratingOrOverrideFn)
 
+					+ SHorizontalBox::Slot()
+					[
+						SNew(STextBlock)
+							.Text(LOCTEXT("GenShowHotSpotsLabel", "Show cleared Hot Spots"))
+					]
+					+ SHorizontalBox::Slot()
+					[
+						SNew(SCheckBox)
+							.IsChecked_Lambda([&]() { return GetScene().DisplayHotSpotsInGeneration ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+							.OnCheckStateChanged_Lambda([&](ECheckBoxState newState) {
+								GetScene().DisplayHotSpotsInGeneration =
+									(newState == ECheckBoxState::Checked);
+							})
+					]
+					
+					+ SHorizontalBox::Slot()
+					[
+						SNew(SSpacer)
+						  .Size(FVector2D{ 20, 1 })
+					]
+
+					+ SHorizontalBox::Slot()
+					[
+						SNew(STextBlock)
+							.Text(LOCTEXT("GenShowUnsolvablesLabel", "Show Unsolvable cells"))
+					]
+					+ SHorizontalBox::Slot()
+					[
+						SNew(SCheckBox)
+							.IsChecked_Lambda([&]() { return GetScene().DisplayUnsolvablesInGeneration ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+							.OnCheckStateChanged_Lambda([&](ECheckBoxState newState) {
+								GetScene().DisplayUnsolvablesInGeneration =
+									(newState == ECheckBoxState::Checked);
+							})
+					]
+					
+					+ SHorizontalBox::Slot()
+					[
+						SNew(SSpacer)
+						  .Size(FVector2D{ 20, 1 })
+					]
+
+					+ SHorizontalBox::Slot()
+					[
+						SNew(STextBlock)
+							.Text(LOCTEXT("GenShowBoringsLabel", "Show Boring cells"))
+					]
+					+ SHorizontalBox::Slot()
+					[
+						SNew(SCheckBox)
+							.IsChecked_Lambda([&]() { return GetScene().DisplayBoringCellsInGeneration ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+							.OnCheckStateChanged_Lambda([&](ECheckBoxState newState) {
+								GetScene().DisplayBoringCellsInGeneration =
+									(newState == ECheckBoxState::Checked);
+							})
+					]
+				]
+				
 				//Show Faces checkbox
 				+ SScrollBox::Slot()
 				[

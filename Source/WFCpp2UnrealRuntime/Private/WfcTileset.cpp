@@ -168,6 +168,12 @@ TOptional<TTuple<WfcFacePrototypeID, WFC_Transforms2D>>
 
     return MakeTuple(*facePrototypeID, *facePermutation);
 }
+WFC::Tiled3D::FaceIdentifiers UWfcTileset::Unwrapped::ToWfcFace(WfcFacePrototypeID unrealFaceID,
+                                                                const FWfcFacePrototype& unrealFaceData) const
+{
+    return unrealFaceData.Unwrap(WfcFacePrototypeFirstIDs[unrealFaceID]);
+}
+
 
 
 UWfcTileset* UWfcTilesetGenerator::Generate(UObject* outer, FName name) const

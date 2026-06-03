@@ -78,7 +78,10 @@ public:
 	FEditorSceneObject_WfcGeneration_Settings GenerationSettings;
 	int NGeneratorTicksToRun = 0; //Consumed on every Refresh() call
 	int NRewindsToRun = 0; //Consumed on every Refresh() call
-	bool DisplayFaceConstraintsInGeneration = false;
+	bool DisplayFaceConstraintsInGeneration = false,
+		 DisplayHotSpotsInGeneration = false,
+		 DisplayUnsolvablesInGeneration = true,
+		 DisplayBoringCellsInGeneration = true;
 
 	
     FWfcTilesetEditorScene(ConstructionValues cvs = ConstructionValues());

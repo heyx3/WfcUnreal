@@ -65,6 +65,8 @@ public:
 			const WFC::Tiled3D::FacePermutation& wfcFace,
 			const UWfcTileset* tileset
 		) const;
+		//Finds the WFC face matching the given Unreal face data.
+		WFC::Tiled3D::FaceIdentifiers ToWfcFace(WfcFacePrototypeID unrealFaceID, const FWfcFacePrototype& unrealFaceData) const;
 	};
 	//Converts this tileset into a plain WFC library tileset.
 	//Guaranteed to produce the same thing every time it's called (same tile/point ID's).

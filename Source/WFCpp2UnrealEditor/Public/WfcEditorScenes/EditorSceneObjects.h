@@ -8,6 +8,7 @@
 #include "WfcTilesetEditorViewportClient.h"
 #include "WfcTileVisualizer.h"
 #include "WfcConstraintHistory.h"
+#include "WfcGenerator.h"
 
 #include "EditorSceneObjects.generated.h"
 
@@ -133,12 +134,21 @@ public:
 
 	UPROPERTY(EditAnywhere)
 	bool ShowFaceConstraints = false;
+	UPROPERTY(EditAnywhere)
+	bool ShowHotSpots = false;
+	UPROPERTY(EditAnywhere)
+	bool ShowUnsolvable = true;
+	UPROPERTY(EditAnywhere)
+	bool ShowBoring = false;
 
 	bool operator==(const FEditorSceneObject_WfcGeneration_Display& other) const
 	{
 		return ExtraSpacing == other.ExtraSpacing &&
 			   Transform.Equals(other.Transform) &&
-			   ShowFaceConstraints == other.ShowFaceConstraints;
+			   ShowFaceConstraints == other.ShowFaceConstraints &&
+			   ShowHotSpots == other.ShowHotSpots &&
+			   ShowUnsolvable == other.ShowUnsolvable &&
+			   ShowBoring == other.ShowBoring;
 	}
 };
 template<> struct TStructOpsTypeTraits<FEditorSceneObject_WfcGeneration_Display> : public TStructOpsTypeTraitsBase2<FEditorSceneObject_WfcGeneration_Display>
@@ -345,13 +355,36 @@ private:
 		TArray<FEditorWireBoxComponent> ClearedViz;
 	};
 	TMap<FIntVector3, FSetCell> setCells;
+
+	//A face within an unsolvable cell.
+	struct FUnsolvableCellFace
+	{
+		//The number of permuted faces that could satisfy this cell
+		//  (including redundant ones, e.g. flipping a face with mirror symmetry).
+		//
+		//If zero, then this face has no possibilities --
+		//    usually because the externally-set constraints are impossible to satisfy.
+		int NPossibilities = -1;
+		
+		//If this face has exactly one possibility, this is its prototype (by ID).
+		int ForcedPrototypeID = -1;
+		//If this face has exactly one possibility, this is its prototype's permutation.
+		WFC_Transforms2D ForcedFaceTransform = WFC_Transforms2D::None;
+	};
+	struct FUnsolvableCell
+	{
+		TOptional<FEditorTextComponent> MarkerViz;
+		TStaticArray<UWfcGenerator::ForcedCellFaceSources, WFC::Tiled3D::N_DIRECTIONS_3D> FaceData; 
+		TStaticArray<TOptional<FEditorSceneObject_WfcFace>, WFC::Tiled3D::N_DIRECTIONS_3D> FaceConstraintsViz;
+	};
+	TMap<FIntVector3, FUnsolvableCell> unsolvableCells;
 	
 	struct FUnsetCell
 	{
 		float Temperature;
 		TOptional<FEditorMeshComponent> TemperatureViz;
 		TOptional<FEditorTextComponent> EntropyViz;
-		TOptional<FEditorWireSphereComponent> BoringViz;
+		TOptional<FEditorWireBoxComponent> BoringViz;
 		TArray<FEditorWireBoxComponent> ClearedViz;
 		TStaticArray<TOptional<FEditorSceneObject_WfcFace>, WFC::Tiled3D::N_DIRECTIONS_3D> FaceConstraintsViz;
 	};
